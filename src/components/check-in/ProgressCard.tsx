@@ -110,11 +110,11 @@ function ProgressCard({ completed, total, commitments = [] }: ProgressCardProps)
             <div className="text-neutral-500 text-[14px] font-normal leading-[20px]" style={{ fontFamily: 'Inter, sans-serif' }}>
               {Math.round(weeklyPercent)}% completed this week
             </div>
-            <div className="w-full bg-neutral-100 rounded-full overflow-hidden" style={{ height: '16px' }}>
-              <div 
-                className="bg-success-400 rounded-full transition-all duration-300"
+      <div className="w-full bg-neutral-100 rounded-full overflow-hidden" style={{ height: '16px' }}>
+        <div 
+          className="bg-success-400 rounded-full transition-all duration-300"
                 style={{ width: `${weeklyPercent}%`, height: '16px' }}
-              />
+        />
             </div>
           </div>
         )}

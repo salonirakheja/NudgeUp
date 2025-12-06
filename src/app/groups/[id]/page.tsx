@@ -7,7 +7,8 @@ import { TrackerTable } from '@/components/groups/TrackerTable';
 import { BottomNav } from '@/components/layout/BottomNav';
 import { useGroups } from '@/contexts/GroupsContext';
 import { useCommitments } from '@/contexts/CommitmentsContext';
-import { Group } from '@/types';
+import { useAuthContext } from '@/contexts/AuthContext';
+import { Group, Commitment } from '@/types';
 
 // Mock data - in real app, fetch from API based on id
 const groupData: Group = {
@@ -30,6 +31,8 @@ export default function GroupDetailPage() {
   const groupId = params.id as string;
   const { groups, deleteGroup, getGroupMembers } = useGroups();
   const { commitments, updateCommitment, completions, getCommitmentStreak } = useCommitments();
+  const { user } = useAuthContext();
+  const currentUserId = user?.id || 'anonymous';
 
   // Find the group from context, fallback to mock data if not found
   const group = groups.find(g => g.id === groupId) || groupData;
@@ -48,37 +51,141 @@ export default function GroupDetailPage() {
   // Get commitments shared with this group
   const sharedCommitments = commitments.filter(c => c.groupIds?.includes(groupId));
   
+  // Helper function to get completions for a specific member
+  const getMemberCompletions = (memberId: string) => {
+    if (memberId === 'current-user' || memberId === currentUserId) {
+      // For current user, use completions from context
+      return completions;
+    }
+    
+    // For other members, read from their localStorage (only in browser)
+    if (typeof window === 'undefined') {
+      return [];
+    }
+    
+    try {
+      const memberCompletionsKey = `nudgeup_completions_${memberId}`;
+      const storedCompletions = localStorage.getItem(memberCompletionsKey);
+      if (storedCompletions) {
+        return JSON.parse(storedCompletions);
+      }
+    } catch (e) {
+      console.warn('Error reading completions for member', memberId, e);
+    }
+    
+    return [];
+  };
+  
+  // Helper function to get commitments for a specific member (for pending count calculation)
+  const getMemberCommitmentsForPending = (memberId: string): Commitment[] => {
+    const actualMemberId = memberId === 'current-user' ? currentUserId : memberId;
+    if (actualMemberId === currentUserId) {
+      return commitments;
+    }
+    
+    // Only access localStorage in browser environment
+    if (typeof window === 'undefined') {
+      return [];
+    }
+    
+    try {
+      const memberCommitmentsKey = `nudgeup_commitments_${actualMemberId}`;
+      const storedCommitments = localStorage.getItem(memberCommitmentsKey);
+      if (storedCommitments) {
+        return JSON.parse(storedCommitments);
+      }
+    } catch (e) {
+      console.warn('Error reading commitments for member', actualMemberId, e);
+    }
+    return [];
+  };
+
   // Calculate pending members count
   const actualPendingCount = groupMembers.filter(m => {
     if (m.id === 'current-user') return false;
+    const actualMemberId = m.id === 'current-user' ? currentUserId : m.id;
+    const memberCompletions = getMemberCompletions(actualMemberId);
+    const memberCommitments = getMemberCommitmentsForPending(m.id);
+    
     // Check if member completed any shared commitment today
-    const memberCompletions = sharedCommitments.map(commitment => {
-      // For current user, check actual completions
-      if (m.id === 'current-user') {
-        const completion = completions.find(
-          c => c.commitmentId === commitment.id && c.date === today && c.completed
-        );
-        return completion?.completed || false;
+    const hasCompletion = sharedCommitments.some(commitment => {
+      // Find member's copy of this commitment
+      const memberCommitment = memberCommitments.find(
+        (c: Commitment) => c.name === commitment.name && c.groupIds?.includes(groupId)
+      );
+      
+      if (!memberCommitment) {
+        return false; // Member doesn't have this commitment
       }
-      return false; // For other members, we'd need their completion data
+      
+      // Check if they completed their copy today
+      const completion = memberCompletions.find(
+        (c: any) => c.commitmentId === memberCommitment.id && c.date === today && c.completed
+      );
+      return completion?.completed || false;
     });
-    return !memberCompletions.some(completed => completed);
+    return !hasCompletion;
   }).length;
-  
+
+  // Helper function to get commitments for a specific member
+  const getMemberCommitments = (memberId: string): Commitment[] => {
+    if (memberId === 'current-user' || memberId === currentUserId) {
+      // For current user, use commitments from context
+      return commitments;
+    }
+    
+    // For other members, read from their localStorage (only in browser)
+    if (typeof window === 'undefined') {
+      return [];
+    }
+    
+    try {
+      const memberCommitmentsKey = `nudgeup_commitments_${memberId}`;
+      const storedCommitments = localStorage.getItem(memberCommitmentsKey);
+      if (storedCommitments) {
+        return JSON.parse(storedCommitments);
+      }
+    } catch (e) {
+      console.warn('Error reading commitments for member', memberId, e);
+    }
+    
+    return [];
+  };
+
   const members = groupMembers.map((member) => {
+    // Get the actual member ID (convert 'current-user' to actual userId)
+    const memberId = member.id === 'current-user' ? currentUserId : member.id;
+    
+    // Get completions and commitments for this member
+    const memberCompletions = getMemberCompletions(memberId);
+    const memberCommitments = getMemberCommitments(memberId);
+    
     // Calculate commitment completions for this member
     const commitmentCompletions: { [commitmentId: string]: boolean } = {};
     sharedCommitments.forEach((commitment) => {
-      // For current user, check actual completions
-      if (member.id === 'current-user') {
-        const completion = completions.find(
-          c => c.commitmentId === commitment.id && c.date === today && c.completed
+      // For current user, match by commitment ID (same commitment object)
+      if (memberId === currentUserId) {
+        const completion = memberCompletions.find(
+          (c: any) => c.commitmentId === commitment.id && c.date === today && c.completed
         );
         commitmentCompletions[commitment.id] = completion?.completed || false;
       } else {
-        // For other members, we'd need to fetch from API in a real app
-        // For now, use the member's sharedCommitments if available
-        commitmentCompletions[commitment.id] = member.sharedCommitments?.some(c => c.id === commitment.id) || false;
+        // For other members, find their copy of this commitment by name and groupId
+        // Each user has their own copy with a different ID, so we match by name + groupId
+        const memberCommitment = memberCommitments.find(
+          (c: Commitment) => c.name === commitment.name && c.groupIds?.includes(groupId)
+        );
+        
+        if (memberCommitment) {
+          // Check if they completed their copy of this commitment today
+          const completion = memberCompletions.find(
+            (c: any) => c.commitmentId === memberCommitment.id && c.date === today && c.completed
+          );
+          commitmentCompletions[commitment.id] = completion?.completed || false;
+        } else {
+          // Member doesn't have this commitment yet
+          commitmentCompletions[commitment.id] = false;
+        }
       }
     });
 
@@ -99,7 +206,7 @@ export default function GroupDetailPage() {
       avatar: member.avatar,
       completedToday,
       streak: calculatedStreak,
-      commitmentCompletions,
+        commitmentCompletions,
     };
   });
 
@@ -129,7 +236,7 @@ export default function GroupDetailPage() {
         onDelete={handleDelete}
       />
 
-      {/* Shared Commitments Section (includes individual trackers and nudges for each commitment) */}
+          {/* Shared Commitments Section (includes individual trackers and nudges for each commitment) */}
       <div className="px-6 pt-6">
         <SharedHabitsSection 
           groupId={groupId} 

@@ -23,7 +23,11 @@ const NudgeCard = ({ memberName, memberAvatar }: { memberName: string; memberAva
   return (
     <div className="w-full px-4 py-3 bg-white rounded-2xl shadow-sm border border-neutral-100 flex items-center gap-3">
       <div className="w-10 h-10 bg-neutral-50 rounded-full flex justify-center items-center">
-        <span className="text-base">{memberAvatar}</span>
+        {memberAvatar && (memberAvatar.startsWith('data:') || memberAvatar.startsWith('http')) ? (
+          <img src={memberAvatar} alt={memberName} className="w-full h-full object-cover" />
+        ) : (
+          <span className="text-base">{memberAvatar || '😊'}</span>
+        )}
       </div>
       <div className="flex-1">
         <div className="text-neutral-700 text-[16px] font-normal leading-[24px]" style={{ fontFamily: 'Inter, sans-serif' }}>

@@ -169,13 +169,13 @@ export const UnifiedCommitmentCard = ({ commitment, members, totalMembers }: Uni
       
       // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 500));
-      
-      setNudgedMembers(prev => new Set(prev).add(memberId));
+    
+    setNudgedMembers(prev => new Set(prev).add(memberId));
     } catch (error) {
       console.error('Error sending nudge:', error);
       alert('Failed to send nudge. Please try again.');
     } finally {
-      setNudgingMember(null);
+    setNudgingMember(null);
     }
   };
 
@@ -185,7 +185,7 @@ export const UnifiedCommitmentCard = ({ commitment, members, totalMembers }: Uni
     if (navigator.share) {
       try {
         await navigator.share({
-          title: `My progress in ${commitment.name}`,
+        title: `My progress in ${commitment.name}`,
           text: shareText,
         });
       } catch (error) {
@@ -316,31 +316,37 @@ export const UnifiedCommitmentCard = ({ commitment, members, totalMembers }: Uni
                     <div
                       onClick={() => handleMemberClick(member.id)}
                       className="flex items-center gap-2 flex-1 cursor-pointer"
-                    >
-                      <span className="text-[16px]">{member.avatar}</span>
-                      <span className="text-neutral-700 text-[14px] font-normal leading-[20px] flex-1" style={{ fontFamily: 'Inter, sans-serif' }}>
-                        {displayName}
-                      </span>
-                      <span className="text-neutral-500 text-[13px] font-normal leading-[18px]" style={{ fontFamily: 'Inter, sans-serif' }}>
-                        {isCompleted ? 'Done' : 'Not done'}
-                      </span>
-                      {/* Status Icon */}
-                      <div className="w-4 h-4 flex justify-center items-center">
-                        {isCompleted ? (
-                          <div className="w-3 h-3 bg-primary-500 rounded-full flex justify-center items-center">
-                            <svg width="8" height="8" viewBox="0 0 8 8" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M6.5 2L3.5 5.5L1.5 4" stroke="white" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
-                          </div>
-                        ) : (
-                          <div className="w-3 h-3 bg-neutral-300 rounded-full"></div>
-                        )}
-                      </div>
+                  >
+                    <div className="w-8 h-8 bg-neutral-50 rounded-full flex justify-center items-center flex-shrink-0 overflow-hidden">
+                      {member.avatar && (member.avatar.startsWith('data:') || member.avatar.startsWith('http')) ? (
+                        <img src={member.avatar} alt={member.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-[16px]">{member.avatar || '😊'}</span>
+                      )}
                     </div>
-                    
+                    <span className="text-neutral-700 text-[14px] font-normal leading-[20px] flex-1" style={{ fontFamily: 'Inter, sans-serif' }}>
+                      {displayName}
+                    </span>
+                    <span className="text-neutral-500 text-[13px] font-normal leading-[18px]" style={{ fontFamily: 'Inter, sans-serif' }}>
+                      {isCompleted ? 'Done' : 'Not done'}
+                    </span>
+                    {/* Status Icon */}
+                    <div className="w-4 h-4 flex justify-center items-center">
+                      {isCompleted ? (
+                        <div className="w-3 h-3 bg-primary-500 rounded-full flex justify-center items-center">
+                          <svg width="8" height="8" viewBox="0 0 8 8" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M6.5 2L3.5 5.5L1.5 4" stroke="white" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </div>
+                      ) : (
+                        <div className="w-3 h-3 bg-neutral-300 rounded-full"></div>
+                      )}
+            </div>
+          </div>
+
                     {/* Inline Nudge Button - Show for all members except current user */}
                     {!isCurrentUser && (
-                      <button
+                    <button
                         onClick={(e) => {
                           e.stopPropagation();
                           e.preventDefault();
@@ -353,9 +359,9 @@ export const UnifiedCommitmentCard = ({ commitment, members, totalMembers }: Uni
                         }}
                         disabled={!isNudgeActive || isNudging}
                         type="button"
-                        className={`
+                      className={`
                           flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[12px] font-medium flex-shrink-0 min-w-[70px] justify-center
-                          ${isNudged 
+                        ${isNudged 
                             ? 'bg-success-50 text-success-600 border border-success-200' 
                             : isNudgeActive && canNudge
                             ? 'bg-primary-100 text-primary-700 hover:bg-primary-200 border border-primary-300 cursor-pointer'
@@ -366,28 +372,28 @@ export const UnifiedCommitmentCard = ({ commitment, members, totalMembers }: Uni
                         style={{ fontFamily: 'Inter, sans-serif' }}
                         title={isCompleted ? 'Member has checked in' : isNudged ? 'Already nudged' : isNudgeActive ? 'Send nudge' : 'Member has checked in'}
                       >
-                        {isNudged ? (
+                      {isNudged ? (
                           <>
-                            <span>Nudged</span>
+                          <span>Nudged</span>
                             <svg width="12" height="12" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M11.5 3.5L5.5 9.5L2.5 6.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
+                            <path d="M11.5 3.5L5.5 9.5L2.5 6.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
                           </>
-                        ) : (
+                      ) : (
                           <>
-                            <span>Nudge</span>
+                          <span>Nudge</span>
                             <svg width="12" height="12" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M5 3.5L9 7L5 10.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
+                            <path d="M5 3.5L9 7L5 10.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
                           </>
-                        )}
+                      )}
                       </button>
                     )}
                   </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
-          </div>
 
           {/* Share Progress Button - Always at bottom for consistency */}
           <button

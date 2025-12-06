@@ -238,7 +238,7 @@ export const SendNudgesSection = ({ groupId, groupName, inviteCode, members, tot
     if (navigator.share) {
       try {
         await navigator.share({
-          title: 'Check out my progress!',
+        title: 'Check out my progress!',
           text: shareText,
           url: shareUrl,
         });

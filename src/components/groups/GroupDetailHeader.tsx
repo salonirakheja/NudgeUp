@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Group, GroupMember } from '@/types';
 
 interface GroupDetailHeaderProps {
@@ -12,6 +12,7 @@ interface GroupDetailHeaderProps {
 
 export const GroupDetailHeader = ({ group, members = [], onBack, onDelete }: GroupDetailHeaderProps) => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
 
   const handleDeleteClick = () => {
     setShowDeleteConfirm(true);
@@ -27,6 +28,10 @@ export const GroupDetailHeader = ({ group, members = [], onBack, onDelete }: Gro
   const handleCancelDelete = () => {
     setShowDeleteConfirm(false);
   };
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   return (
     <div className="w-full px-6 pt-12 pb-4">
@@ -114,7 +119,7 @@ export const GroupDetailHeader = ({ group, members = [], onBack, onDelete }: Gro
       </div>
 
       {/* Members Row */}
-      {members.length > 0 && (
+      {isMounted && members.length > 0 && (
         <div className="flex items-center gap-2 mb-3">
           <div className="flex items-center -space-x-2">
             {members.slice(0, 4).map((member, index) => (
@@ -124,7 +129,11 @@ export const GroupDetailHeader = ({ group, members = [], onBack, onDelete }: Gro
                 style={{ zIndex: members.length - index }}
                 title={member.name}
               >
-                <span className="text-[12px]">{member.avatar}</span>
+                {member.avatar && (member.avatar.startsWith('data:') || member.avatar.startsWith('http')) ? (
+                  <img src={member.avatar} alt={member.name} className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-[12px]">{member.avatar || '😊'}</span>
+                )}
               </div>
             ))}
             {members.length > 4 && (

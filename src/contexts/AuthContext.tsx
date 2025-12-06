@@ -69,45 +69,45 @@ function AuthProvider({ children }: { children: ReactNode }) {
   const checkUserExists = async (email: string): Promise<boolean> => {
     const normalizedEmail = email.toLowerCase().trim();
     console.log('Checking if user exists:', normalizedEmail);
-    console.log('Users query loading:', usersLoading);
-    console.log('Total users in database:', usersData?.users?.length || 0);
     
-    // Wait for query to load if it's still loading
-    if (usersLoading) {
-      console.log('Waiting for users query to load...');
-      let attempts = 0;
-      while (usersLoading && attempts < 20) {
-        await new Promise(resolve => setTimeout(resolve, 200));
-        attempts++;
+    try {
+      // First try the cached useQuery data (might work if partially authenticated)
+      if (usersData?.users && usersData.users.length > 0) {
+        const exists = usersData.users.some((u: any) => {
+          const userEmail = u.email?.toLowerCase()?.trim();
+          return userEmail === normalizedEmail;
+        });
+        
+        if (exists) {
+          const user = usersData.users.find((u: any) => u.email?.toLowerCase()?.trim() === normalizedEmail);
+          console.log('Found user in cached query:', {
+            id: user?.id,
+            email: user?.email,
+            hasPassword: !!user?.password,
+            name: user?.name,
+      });
+          return true;
+        }
       }
-    }
-    
-    // If still no data after waiting, the query might be restricted by permissions
-    if (!usersData?.users || usersData.users.length === 0) {
-      console.log('No users data available from query');
-      console.log('This might be due to read permissions - checking if user can read users table');
-      console.log('Current auth state:', {
-        instantUser: instantUser ? { id: instantUser.id, email: instantUser.email } : null,
-        authLoading,
+      
+      // If not found in cache, try a fresh query
+      console.log('Making fresh query to check if user exists...');
+      const freshUsersData = await queryOnce({ users: {} });
+      
+      console.log('Fresh query result:', {
+        usersCount: freshUsersData?.users?.length || 0,
+        userEmails: freshUsersData?.users?.map((u: any) => u.email) || [],
       });
       
-      // If query returns no results, it might be due to permissions
-      // Be lenient and allow sign-in attempt - the signIn function will verify if user exists
-      console.warn('⚠️ Users query returned no results. This might be due to read permissions.');
-      console.warn('→ Proceeding with sign-in attempt - signIn function will verify if user exists');
-      console.warn('→ Make sure InstantDB rules allow: "users.read": "users.id === auth.id || auth.id === null"');
-      // Return true to allow sign-in attempt - signIn will handle verification
-      return true;
-    }
-    
-    const exists = usersData.users.some((u: any) => {
+      if (freshUsersData?.users && freshUsersData.users.length > 0) {
+        const exists = freshUsersData.users.some((u: any) => {
       const userEmail = u.email?.toLowerCase()?.trim();
       return userEmail === normalizedEmail;
     });
     
     console.log('User exists check result:', exists);
     if (exists) {
-      const user = usersData.users.find((u: any) => u.email?.toLowerCase()?.trim() === normalizedEmail);
+          const user = freshUsersData.users.find((u: any) => u.email?.toLowerCase()?.trim() === normalizedEmail);
       console.log('Found user:', {
         id: user?.id,
         email: user?.email,
@@ -116,10 +116,25 @@ function AuthProvider({ children }: { children: ReactNode }) {
       });
     } else {
       console.log('User not found in query results');
-      console.log('Available user emails:', usersData.users.map((u: any) => u.email));
+          console.log('Available user emails:', freshUsersData.users.map((u: any) => u.email));
     }
     
     return exists;
+      }
+      
+      // If both queries return no results, it might be due to permissions
+      // Be lenient - return true to allow sign-in attempt
+      // The signIn function will verify if user actually exists
+      console.log('No users found in queries - this might be due to read permissions');
+      console.log('Returning true to allow sign-in attempt - signIn will verify user exists');
+      return true; // Be lenient - allow sign-in attempt
+    } catch (error: any) {
+      console.error('Error checking if user exists:', error);
+      // Be lenient - return true to allow sign-in attempt
+      // The signIn function will verify if user actually exists
+      console.warn('⚠️ Error checking user existence. Returning true to allow sign-in attempt.');
+      return true; // Be lenient - allow sign-in attempt
+    }
   };
 
   const signIn = async (email: string, password: string) => {
@@ -560,8 +575,37 @@ function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     try {
+      // Get current user ID before signing out
+      const currentUserId = localUser?.id || instantUser?.id;
+      
       await auth.signOut();
       setLocalUser(null);
+      
+      // Clear only non-user-specific localStorage data (legacy keys)
+      const keysToRemove = [
+        'nudgeup_userName',
+        'nudgeup_userAvatar',
+        'nudgeup_userEmail',
+        'userAvatar',
+        'userName',
+        'userAvatarImage',
+      ];
+      
+      keysToRemove.forEach(key => {
+        localStorage.removeItem(key);
+      });
+      
+      // Clear refresh tokens (but keep user data - it will be loaded when they sign back in)
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('instantdb_refresh_token_')) {
+          localStorage.removeItem(key);
+        }
+      });
+      
+      // NOTE: We do NOT clear user-specific data (nudgeup_commitments_${userId}, etc.)
+      // This data should persist so users can see their data when they sign back in
+      // Data is stored with userId suffix, so it's automatically isolated per user
+      
       router.push('/');
     } catch (error) {
       console.error('Error signing out:', error);

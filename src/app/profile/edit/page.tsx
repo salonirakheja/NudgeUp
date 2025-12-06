@@ -60,7 +60,62 @@ export default function EditProfilePage() {
     setShowEmojiPicker(false);
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          
+          if (!ctx) {
+            reject(new Error('Could not get canvas context'));
+            return;
+          }
+
+          // Set maximum dimensions (300x300 for avatar)
+          const MAX_WIDTH = 300;
+          const MAX_HEIGHT = 300;
+          let width = img.width;
+          let height = img.height;
+
+          // Calculate new dimensions while maintaining aspect ratio
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height = (height * MAX_WIDTH) / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width = (width * MAX_HEIGHT) / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          // Draw and compress the image
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          // Use JPEG with quality 0.8 for better compression (convert PNG to JPEG)
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+          resolve(compressedDataUrl);
+        };
+        img.onerror = () => {
+          reject(new Error('Error loading image'));
+        };
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = () => {
+        reject(new Error('Error reading file'));
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       // Validate file type
@@ -75,17 +130,16 @@ export default function EditProfilePage() {
         return;
       }
 
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const result = reader.result as string;
-        setAvatarImage(result);
+      try {
+        // Compress the image before setting it
+        const compressedImage = await compressImage(file);
+        setAvatarImage(compressedImage);
         setAvatar(''); // Clear emoji when image is selected
         setShowEmojiPicker(false);
-      };
-      reader.onerror = () => {
-        alert('Error reading image file');
-      };
-      reader.readAsDataURL(file);
+      } catch (error) {
+        console.error('Error compressing image:', error);
+        alert('Error processing image. Please try again.');
+      }
     }
     // Reset input so same file can be selected again
     if (fileInputRef.current) {
@@ -99,23 +153,40 @@ export default function EditProfilePage() {
 
   const handleSave = async () => {
     setIsLoading(true);
-    // Save name and avatar to localStorage
-    localStorage.setItem('userName', name);
-    localStorage.setItem('userAvatar', avatar);
-    if (avatarImage) {
-      localStorage.setItem('userAvatarImage', avatarImage);
-    } else {
-      localStorage.removeItem('userAvatarImage');
+    try {
+      // Save name and avatar to localStorage
+      localStorage.setItem('userName', name);
+      localStorage.setItem('userAvatar', avatar);
+      if (avatarImage) {
+        try {
+          localStorage.setItem('userAvatarImage', avatarImage);
+        } catch (error) {
+          // If quota exceeded, try to compress further or show error
+          if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+            alert('Image is too large to save. Please try a smaller image or reduce the file size.');
+            setIsLoading(false);
+            return;
+          }
+          throw error;
+        }
+      } else {
+        localStorage.removeItem('userAvatarImage');
+      }
+      
+      // Dispatch custom event to update avatar and name in same tab
+      // This will trigger GroupsContext to update member info in all groups
+      window.dispatchEvent(new CustomEvent('avatarUpdated', { 
+        detail: { avatar, avatarImage, name } 
+      }));
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
+      router.back();
+    } catch (error) {
+      console.error('Error saving profile:', error);
+      alert('Error saving profile. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
-    
-    // Dispatch custom event to update avatar in same tab
-    window.dispatchEvent(new CustomEvent('avatarUpdated', { 
-      detail: { avatar, avatarImage, name } 
-    }));
-    
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setIsLoading(false);
-    router.back();
   };
 
   return (

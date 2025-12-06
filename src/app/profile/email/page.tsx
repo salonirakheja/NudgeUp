@@ -52,7 +52,7 @@ export default function EmailSettingsPage() {
       
       // In a real app, we would update via AuthContext or API
       // For now, we'll just store in localStorage
-      await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 500));
       
       alert('Email updated successfully!');
       router.back();
@@ -60,7 +60,7 @@ export default function EmailSettingsPage() {
       console.error('Error updating email:', error);
       setError('Failed to update email. Please try again.');
     } finally {
-      setIsLoading(false);
+    setIsLoading(false);
     }
   };
 

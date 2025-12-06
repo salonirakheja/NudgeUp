@@ -120,9 +120,13 @@ export const TrackerTable = ({ members }: TrackerTableProps) => {
               {/* Member Info */}
               <div className="flex-1 flex items-center gap-3 min-w-0">
                 <div className="w-8 h-8 bg-neutral-50 rounded-full flex justify-center items-center flex-shrink-0">
+                  {member.avatar && (member.avatar.startsWith('data:') || member.avatar.startsWith('http')) ? (
+                    <img src={member.avatar} alt={member.name} className="w-full h-full object-cover" />
+                  ) : (
                   <span className="text-neutral-950 text-[16px] font-normal leading-[24px]" style={{ fontFamily: 'Inter, sans-serif' }}>
-                    {member.avatar}
+                      {member.avatar || '😊'}
                   </span>
+                  )}
                 </div>
                 <span className="text-neutral-700 text-[16px] font-normal leading-[24px] truncate" style={{ fontFamily: 'Inter, sans-serif' }}>
                   {member.name}

@@ -65,7 +65,7 @@ export default function PasswordSecurityPage() {
       }
       
       // In a real app, we would update via AuthContext or API
-      await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 500));
       
       alert('Password updated successfully!');
       setCurrentPassword('');
@@ -76,7 +76,7 @@ export default function PasswordSecurityPage() {
       console.error('Error updating password:', error);
       setError('Failed to update password. Please try again.');
     } finally {
-      setIsLoading(false);
+    setIsLoading(false);
     }
   };
 

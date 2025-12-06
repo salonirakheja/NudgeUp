@@ -45,11 +45,15 @@ const FriendPill = ({ members, totalCount, onClick }: FriendPillProps) => {
         {displayMembers.map((member, index) => (
           <div
             key={member.id}
-            className="w-5 h-5 bg-white rounded-full flex items-center justify-center border-2 border-alert-400 shadow-sm"
+            className="w-5 h-5 bg-white rounded-full flex items-center justify-center border-2 border-alert-400 shadow-sm overflow-hidden"
             style={{ zIndex: displayMembers.length - index }}
             title={member.name}
           >
-            <span className="text-[10px]">{member.avatar}</span>
+            {member.avatar && (member.avatar.startsWith('data:') || member.avatar.startsWith('http')) ? (
+              <img src={member.avatar} alt={member.name} className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-[10px]">{member.avatar || '😊'}</span>
+            )}
           </div>
         ))}
         {/* Plus icon */}
@@ -71,7 +75,7 @@ export const GroupCard = ({ group }: GroupCardProps) => {
   // Get commitments shared with this group (where groupIds array includes this group's id)
   const sharedCommitments = commitments.filter(c => c.groupIds?.includes(group.id));
   const sharedCommitmentsCount = sharedCommitments.length;
-  
+
   // Separate daily and weekly commitments
   const dailyCommitments = sharedCommitments.filter(c => !c.frequencyType || c.frequencyType === 'daily');
   const weeklyCommitments = sharedCommitments.filter(c => c.frequencyType === 'weekly');
@@ -117,14 +121,14 @@ export const GroupCard = ({ group }: GroupCardProps) => {
     
     // Check if at least one weekly commitment was completed on this day
     const hasWeeklyCompletion = weeklyCommitments.some(commitment => {
-      const completion = completions.find(
+    const completion = completions.find(
         c => c.commitmentId === commitment.id && 
              c.date === dateStr && 
              c.completed
-      );
-      return completion?.completed || false;
+    );
+    return completion?.completed || false;
     });
-    
+  
     // Check if at least one shared commitment was completed on this day
     const hasCompletion = hasDailyCompletion || hasWeeklyCompletion;
     
@@ -262,7 +266,8 @@ export const GroupCard = ({ group }: GroupCardProps) => {
     router.push(`/groups/${group.id}`);
   };
 
-  const handleShareInvite = () => {
+  const handleShareInvite = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent navigation to group detail page
     if (navigator.share) {
       navigator.share({
         title: `Join ${group.name}`,
@@ -332,11 +337,15 @@ export const GroupCard = ({ group }: GroupCardProps) => {
             {displayMembers.map((member, index) => (
               <div
                 key={member.id}
-                className="w-5 h-5 bg-primary-100 rounded-full flex items-center justify-center border-2 border-white shadow-sm"
+                className="w-5 h-5 bg-primary-100 rounded-full flex items-center justify-center border-2 border-white shadow-sm overflow-hidden"
                 style={{ zIndex: displayMembers.length - index }}
                 title={member.name}
               >
-                <span className="text-[9px]">{member.avatar}</span>
+                {member.avatar && (member.avatar.startsWith('data:') || member.avatar.startsWith('http')) ? (
+                  <img src={member.avatar} alt={member.name} className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-[9px]">{member.avatar || '😊'}</span>
+                )}
               </div>
             ))}
             {groupMembers.length > 4 && (
@@ -405,21 +414,21 @@ export const GroupCard = ({ group }: GroupCardProps) => {
             <div className="text-neutral-500 text-[12px] font-medium leading-[16px] uppercase tracking-wide" style={{ fontFamily: 'Inter, sans-serif' }}>
               Group Performance
             </div>
-            <div className="flex justify-between items-center">
+          <div className="flex justify-between items-center">
               <span className="text-neutral-600 text-[13px] font-normal leading-[18px]" style={{ fontFamily: 'Inter, sans-serif' }}>
                 Group Average
-              </span>
-              <div className="flex items-center gap-1">
+            </span>
+            <div className="flex items-center gap-1">
               <img 
                 src="/icons/Calendar/Icon-4.svg" 
                 alt="Streak" 
                 className="w-4 h-4"
               />
-                <span className="text-neutral-700 text-[14px] font-normal leading-[20px]" style={{ fontFamily: 'Inter, sans-serif' }}>
+              <span className="text-neutral-700 text-[14px] font-normal leading-[20px]" style={{ fontFamily: 'Inter, sans-serif' }}>
                   {groupAverageCumulativeDays} days
-                </span>
-              </div>
+              </span>
             </div>
+          </div>
             {/* Show breakdown by type */}
             <div className="flex flex-col gap-1.5 text-[12px] text-neutral-600" style={{ fontFamily: 'Inter, sans-serif' }}>
               {dailyCommitments.length > 0 && (
@@ -436,27 +445,27 @@ export const GroupCard = ({ group }: GroupCardProps) => {
               )}
             </div>
             <div className="w-full h-2 bg-white/60 rounded-full overflow-hidden">
-              <div 
+            <div 
                 className="h-2 bg-primary-500 rounded-full transition-all"
-                style={{ width: `${Math.min(groupAveragePercent, 100)}%` }}
-              />
-            </div>
+              style={{ width: `${Math.min(groupAveragePercent, 100)}%` }}
+            />
           </div>
+        </div>
         )}
       </div>
 
       {/* Invite Button Row - Match ChallengeInfoCard */}
       <div className="px-6 pt-2 pb-4 flex justify-end items-center">
         <button
-          onClick={handleShareInvite}
+            onClick={handleShareInvite}
           className="w-10 h-10 rounded-full flex items-center justify-center shadow-sm hover:shadow-md transition-shadow flex-shrink-0 bg-alert-400"
           title="Invite people to group"
         >
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M15 6.66667L10 11.6667L5 6.66667M2.5 4.16667H17.5C18.1904 4.16667 18.75 4.72623 18.75 5.41667V14.5833C18.75 15.2738 18.1904 15.8333 17.5 15.8333H2.5C1.80964 15.8333 1.25 15.2738 1.25 14.5833V5.41667C1.25 4.72623 1.80964 4.16667 2.5 4.16667Z" stroke="white" strokeWidth="1.67" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
-        </button>
-      </div>
+          </button>
+        </div>
     </div>
   );
 };

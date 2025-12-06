@@ -6,18 +6,8 @@ import { CommitmentsProvider } from '@/contexts/CommitmentsContext';
 import { GroupsProvider } from '@/contexts/GroupsContext';
 
 export function ClientProviders({ children }: { children: React.ReactNode }) {
-  const [isMounted, setIsMounted] = useState(false);
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
-  // During SSR, render children without providers to avoid InstantDB hooks being called
-  if (!isMounted) {
-    return <>{children}</>;
-  }
-
-  // On client side, render with all providers
+  // Always render providers - they will handle SSR/CSR differences internally
+  // This ensures that useAuthContext and other hooks are always available
   return (
     <AuthProvider>
       <CommitmentsProvider>

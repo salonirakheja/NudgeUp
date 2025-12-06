@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { Commitment, CommitmentCompletion } from '@/types';
+import { useAuthContext } from '@/contexts/AuthContext';
 
 interface CommitmentsContextType {
   commitments: Commitment[];
@@ -19,15 +20,28 @@ interface CommitmentsContextType {
 
 const CommitmentsContext = createContext<CommitmentsContextType | undefined>(undefined);
 
-const STORAGE_KEY_COMMITMENTS = 'nudgeup_commitments';
-const STORAGE_KEY_COMPLETIONS = 'nudgeup_completions';
-
 export function CommitmentsProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuthContext();
+  const userId = user?.id || 'anonymous';
+  
+  // Use user-specific storage keys
+  const STORAGE_KEY_COMMITMENTS = `nudgeup_commitments_${userId}`;
+  const STORAGE_KEY_COMPLETIONS = `nudgeup_completions_${userId}`;
+  
   const [commitments, setCommitments] = useState<Commitment[]>([]);
   const [completions, setCompletions] = useState<CommitmentCompletion[]>([]);
 
-  // Load from localStorage on mount
+  // Load from localStorage on mount and when user changes
   useEffect(() => {
+    // Clear commitments and completions first when user changes
+    setCommitments([]);
+    setCompletions([]);
+    
+    // Only load if we have a real user ID (not anonymous)
+    if (!user?.id || userId === 'anonymous') {
+      return;
+    }
+    
     const storedCommitments = localStorage.getItem(STORAGE_KEY_COMMITMENTS);
     const storedCompletions = localStorage.getItem(STORAGE_KEY_COMPLETIONS);
 
@@ -40,44 +54,8 @@ export function CommitmentsProvider({ children }: { children: ReactNode }) {
       } catch (e) {
         console.error('Error loading commitments from localStorage:', e);
       }
-    } else {
-      // Initialize with default commitments if none exist
-      loadedCommitments = [
-        {
-          id: '1',
-          name: 'Morning Meditation',
-          icon: '🧘',
-          streak: 12,
-          completed: false,
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: '2',
-          name: 'Drink 8 Glasses of Water',
-          icon: '💧',
-          streak: 8,
-          completed: false,
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: '3',
-          name: 'Read for 30 Minutes',
-          icon: '📚',
-          streak: 5,
-          completed: false,
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: '4',
-          name: 'Evening Workout',
-          icon: '💪',
-          streak: 15,
-          completed: false,
-          createdAt: new Date().toISOString(),
-        },
-      ];
-      localStorage.setItem(STORAGE_KEY_COMMITMENTS, JSON.stringify(loadedCommitments));
     }
+    // New users start with empty commitments - they can create their own
 
     if (storedCompletions) {
       try {
@@ -131,20 +109,36 @@ export function CommitmentsProvider({ children }: { children: ReactNode }) {
     });
 
     setCommitments(updatedCommitments);
-  }, []);
+  }, [userId, STORAGE_KEY_COMMITMENTS, STORAGE_KEY_COMPLETIONS, user?.id]);
 
   // Save to localStorage whenever commitments or completions change
   useEffect(() => {
+    // Only save if we have a real user ID
+    if (!user?.id || userId === 'anonymous') {
+      return;
+    }
+    
     if (commitments.length > 0) {
       localStorage.setItem(STORAGE_KEY_COMMITMENTS, JSON.stringify(commitments));
+    } else {
+      // Clear storage if commitments array is empty
+      localStorage.removeItem(STORAGE_KEY_COMMITMENTS);
     }
-  }, [commitments]);
+  }, [commitments, STORAGE_KEY_COMMITMENTS, user?.id, userId]);
 
   useEffect(() => {
+    // Only save if we have a real user ID
+    if (!user?.id || userId === 'anonymous') {
+      return;
+    }
+    
     if (completions.length > 0) {
       localStorage.setItem(STORAGE_KEY_COMPLETIONS, JSON.stringify(completions));
+    } else {
+      // Clear storage if completions array is empty
+      localStorage.removeItem(STORAGE_KEY_COMPLETIONS);
     }
-  }, [completions]);
+  }, [completions, STORAGE_KEY_COMPLETIONS, user?.id, userId]);
 
   const addCommitment = (commitmentData: Omit<Commitment, 'id' | 'createdAt' | 'streak' | 'completed'>) => {
     const newCommitment: Commitment = {
@@ -161,6 +155,101 @@ export function CommitmentsProvider({ children }: { children: ReactNode }) {
   };
 
   const updateCommitment = (id: string, updates: Partial<Commitment>) => {
+    const commitment = commitments.find(c => c.id === id);
+    if (!commitment) return;
+    
+    // Check if groupIds are being updated
+    if (updates.groupIds && Array.isArray(updates.groupIds)) {
+      const oldGroupIds = commitment.groupIds || [];
+      const newGroupIds = updates.groupIds;
+      
+      // Find newly added group IDs (groups that weren't in the old list)
+      const newlyAddedGroupIds = newGroupIds.filter(groupId => !oldGroupIds.includes(groupId));
+      
+      // For each newly added group, add this commitment to all existing members
+      if (newlyAddedGroupIds.length > 0) {
+        console.log('🔄 Commitment shared with new groups:', newlyAddedGroupIds);
+        
+        // Search all users' localStorage for groups
+        const allStorageKeys = Object.keys(localStorage);
+        const groupKeys = allStorageKeys.filter(key => key.startsWith('nudgeup_groups_'));
+        
+        for (const groupId of newlyAddedGroupIds) {
+          console.log(`📦 Finding members for group: ${groupId}`);
+          
+          // Find the group in any user's storage
+          for (const key of groupKeys) {
+            try {
+              const storedGroups = localStorage.getItem(key);
+              if (storedGroups) {
+                const parsedGroups = JSON.parse(storedGroups);
+                if (Array.isArray(parsedGroups)) {
+                  const group = parsedGroups.find((g: any) => g.id === groupId);
+                  if (group && group.memberList) {
+                    console.log(`👥 Found ${group.memberList.length} members in group`);
+                    
+                    // For each member, add the commitment to their list
+                    for (const member of group.memberList) {
+                      // Skip the current user (they already have the commitment)
+                      if (member.id === 'current-user' && key === `nudgeup_groups_${userId}`) {
+                        continue;
+                      }
+                      
+                      // Extract user ID from the storage key (format: nudgeup_groups_${userId})
+                      const memberUserId = key.replace('nudgeup_groups_', '');
+                      
+                      // Skip if this is the current user's storage
+                      if (memberUserId === userId) {
+                        continue;
+                      }
+                      
+                      // Get the member's commitments
+                      const memberCommitmentsKey = `nudgeup_commitments_${memberUserId}`;
+                      const storedMemberCommitments = localStorage.getItem(memberCommitmentsKey);
+                      const memberCommitments: Commitment[] = storedMemberCommitments 
+                        ? JSON.parse(storedMemberCommitments) 
+                        : [];
+                      
+                      // Check if member already has this commitment (by name and group)
+                      const alreadyHasCommitment = memberCommitments.some(c => 
+                        c.name === commitment.name && c.groupIds?.includes(groupId)
+                      );
+                      
+                      if (!alreadyHasCommitment) {
+                        console.log(`➕ Adding "${commitment.name}" to member ${memberUserId}`);
+                        
+                        // Create a new commitment for the member
+                        const newCommitment: Commitment = {
+                          ...commitment,
+                          id: Date.now().toString() + Math.random().toString(36).substr(2, 9), // Unique ID
+                          createdAt: new Date().toISOString(),
+                          streak: 0,
+                          completed: false,
+                          groupIds: [groupId, ...(commitment.groupIds || [])],
+                          weeklyStreak: commitment.frequencyType === 'weekly' ? 0 : undefined,
+                        };
+                        
+                        // Add to member's commitments
+                        memberCommitments.push(newCommitment);
+                        localStorage.setItem(memberCommitmentsKey, JSON.stringify(memberCommitments));
+                        
+                        console.log(`✅ Added commitment to member ${memberUserId}`);
+                      } else {
+                        console.log(`⏭️ Member ${memberUserId} already has this commitment`);
+                      }
+                    }
+                  }
+                }
+              }
+            } catch (e) {
+              console.warn('Error updating commitments for group members:', e);
+            }
+          }
+        }
+      }
+    }
+    
+    // Update the commitment in the current user's state
     setCommitments((prev) =>
       prev.map((commitment) => (commitment.id === id ? { ...commitment, ...updates } : commitment))
     );
@@ -222,13 +311,13 @@ export function CommitmentsProvider({ children }: { children: ReactNode }) {
         updateCommitment(commitmentId, { weeklyStreak });
       } else {
         // Update daily streak for daily habits
-        if (isCompleted) {
-          const streak = getCommitmentStreak(commitmentId);
-          updateCommitment(commitmentId, { streak });
-        } else {
-          // If unchecking today, recalculate streak
-          const streak = getCommitmentStreak(commitmentId);
-          updateCommitment(commitmentId, { streak });
+      if (isCompleted) {
+        const streak = getCommitmentStreak(commitmentId);
+        updateCommitment(commitmentId, { streak });
+      } else {
+        // If unchecking today, recalculate streak
+        const streak = getCommitmentStreak(commitmentId);
+        updateCommitment(commitmentId, { streak });
         }
       }
     }
@@ -406,7 +495,7 @@ export function CommitmentsProvider({ children }: { children: ReactNode }) {
         break;
       }
     }
-    
+
     return streak;
   };
 

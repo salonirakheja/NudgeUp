@@ -52,14 +52,14 @@ export default function NotificationsPage() {
     setIsLoading(true);
     try {
       saveSettings(settings);
-      await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 500));
       alert('Notification settings saved!');
       router.back();
     } catch (error) {
       console.error('Error saving settings:', error);
       alert('Failed to save settings. Please try again.');
     } finally {
-      setIsLoading(false);
+    setIsLoading(false);
     }
   };
 
