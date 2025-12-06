@@ -18,11 +18,13 @@ function CheckInPageContent() {
   const completedCount = commitments.filter(c => c.completed).length;
   const totalCommitments = commitments.length;
 
-  const handleAddCommitment = (newCommitment: { name: string; icon: string; duration?: number }) => {
+  const handleAddCommitment = (newCommitment: { name: string; icon: string; duration?: number; frequencyType?: 'daily' | 'weekly'; timesPerWeek?: number }) => {
     addCommitment({
       name: newCommitment.name,
       icon: newCommitment.icon,
       duration: newCommitment.duration,
+      frequencyType: newCommitment.frequencyType,
+      timesPerWeek: newCommitment.timesPerWeek,
     });
     setIsModalOpen(false);
   };

@@ -2,10 +2,8 @@
 
 import { useParams, useRouter } from 'next/navigation';
 import { GroupDetailHeader } from '@/components/groups/GroupDetailHeader';
-import { ChallengeInfoCard } from '@/components/groups/ChallengeInfoCard';
 import { SharedHabitsSection } from '@/components/groups/SharedHabitsSection';
 import { TrackerTable } from '@/components/groups/TrackerTable';
-import { SendNudgesSection } from '@/components/groups/SendNudgesSection';
 import { BottomNav } from '@/components/layout/BottomNav';
 import { useGroups } from '@/contexts/GroupsContext';
 import { useCommitments } from '@/contexts/CommitmentsContext';
@@ -31,7 +29,7 @@ export default function GroupDetailPage() {
   const router = useRouter();
   const groupId = params.id as string;
   const { groups, deleteGroup, getGroupMembers } = useGroups();
-  const { commitments, updateCommitment, completions } = useCommitments();
+  const { commitments, updateCommitment, completions, getCommitmentStreak } = useCommitments();
 
   // Find the group from context, fallback to mock data if not found
   const group = groups.find(g => g.id === groupId) || groupData;
@@ -41,11 +39,33 @@ export default function GroupDetailPage() {
   
   // Convert GroupMember[] to Member[] format expected by SharedHabitsSection
   // and calculate completion status based on actual commitment completions
-  const today = new Date().toISOString().split('T')[0];
+  const todayObj = new Date();
+  const todayYear = todayObj.getFullYear();
+  const todayMonth = todayObj.getMonth() + 1;
+  const todayDay = todayObj.getDate();
+  const today = `${todayYear}-${String(todayMonth).padStart(2, '0')}-${String(todayDay).padStart(2, '0')}`;
+  
+  // Get commitments shared with this group
+  const sharedCommitments = commitments.filter(c => c.groupIds?.includes(groupId));
+  
+  // Calculate pending members count
+  const actualPendingCount = groupMembers.filter(m => {
+    if (m.id === 'current-user') return false;
+    // Check if member completed any shared commitment today
+    const memberCompletions = sharedCommitments.map(commitment => {
+      // For current user, check actual completions
+      if (m.id === 'current-user') {
+        const completion = completions.find(
+          c => c.commitmentId === commitment.id && c.date === today && c.completed
+        );
+        return completion?.completed || false;
+      }
+      return false; // For other members, we'd need their completion data
+    });
+    return !memberCompletions.some(completed => completed);
+  }).length;
+  
   const members = groupMembers.map((member) => {
-    // Get commitments shared with this group (where groupIds array includes this group's id)
-    const sharedCommitments = commitments.filter(c => c.groupIds?.includes(groupId));
-    
     // Calculate commitment completions for this member
     const commitmentCompletions: { [commitmentId: string]: boolean } = {};
     sharedCommitments.forEach((commitment) => {
@@ -65,13 +85,21 @@ export default function GroupDetailPage() {
     // Check if member completed any commitment today
     const completedToday = Object.values(commitmentCompletions).some(completed => completed);
 
+    // Calculate streak for current user from actual commitment completions
+    let calculatedStreak = member.streak || member.currentStreak || 0;
+    if (member.id === 'current-user' && sharedCommitments.length > 0) {
+      // Calculate streak from shared commitments - use the highest streak among shared commitments
+      const streaks = sharedCommitments.map(commitment => getCommitmentStreak(commitment.id));
+      calculatedStreak = streaks.length > 0 ? Math.max(...streaks) : 0;
+    }
+
     return {
       id: member.id,
       name: member.name,
       avatar: member.avatar,
       completedToday,
-      streak: member.streak || member.currentStreak || 0,
-        commitmentCompletions,
+      streak: calculatedStreak,
+      commitmentCompletions,
     };
   });
 
@@ -101,12 +129,7 @@ export default function GroupDetailPage() {
         onDelete={handleDelete}
       />
 
-      {/* Challenge Info Card */}
-      <div className="px-6 pt-6">
-        <ChallengeInfoCard group={group} members={members} />
-      </div>
-
-          {/* Shared Commitments Section (includes individual trackers and nudges for each commitment) */}
+      {/* Shared Commitments Section (includes individual trackers and nudges for each commitment) */}
       <div className="px-6 pt-6">
         <SharedHabitsSection 
           groupId={groupId} 

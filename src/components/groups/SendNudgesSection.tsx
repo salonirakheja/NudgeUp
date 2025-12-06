@@ -1,6 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useParams } from 'next/navigation';
+import { useCommitments } from '@/contexts/CommitmentsContext';
 
 interface NudgeCardProps {
   title: string;
@@ -40,38 +42,223 @@ const NudgeCard = ({ title, description, iconBg, iconPath, sendIconPath, onSend 
   );
 };
 
+interface Member {
+  id: string;
+  name: string;
+  avatar: string;
+  completedToday: boolean;
+  streak: number;
+  commitmentCompletions?: { [commitmentId: string]: boolean };
+}
+
 interface SendNudgesSectionProps {
+  groupId: string;
+  groupName: string;
+  inviteCode?: string;
+  members: Member[];
   totalMembers?: number;
   pendingMembers?: number;
 }
 
-export const SendNudgesSection = ({ totalMembers = 12, pendingMembers = 1 }: SendNudgesSectionProps) => {
+interface NudgeRecord {
+  id: string;
+  groupId: string;
+  memberId?: string;
+  commitmentId?: string;
+  type: 'entire_group' | 'pending' | 'inactive' | 'individual' | 'encouragement';
+  timestamp: number;
+}
+
+const STORAGE_KEY_NUDGES = 'nudgeup_nudges';
+
+const getNudges = (): NudgeRecord[] => {
+  if (typeof window === 'undefined') return [];
+  const stored = localStorage.getItem(STORAGE_KEY_NUDGES);
+  return stored ? JSON.parse(stored) : [];
+};
+
+const saveNudge = (nudge: NudgeRecord) => {
+  const nudges = getNudges();
+  nudges.push(nudge);
+  localStorage.setItem(STORAGE_KEY_NUDGES, JSON.stringify(nudges));
+};
+
+const canNudge = (groupId: string, memberId?: string, type: string = 'individual'): boolean => {
+  const nudges = getNudges();
+  const now = Date.now();
+  const oneHour = 60 * 60 * 1000;
+  
+  // Check if we've nudged this recipient in the last hour
+  const recentNudge = nudges.find(n => {
+    if (type === 'entire_group') {
+      return n.groupId === groupId && n.type === 'entire_group' && (now - n.timestamp) < oneHour;
+    }
+    return n.groupId === groupId && n.memberId === memberId && (now - n.timestamp) < oneHour;
+  });
+  
+  return !recentNudge;
+};
+
+export const SendNudgesSection = ({ groupId, groupName, inviteCode, members, totalMembers, pendingMembers }: SendNudgesSectionProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isSending, setIsSending] = useState<string | null>(null);
+  const params = useParams();
+  const { commitments, completions } = useCommitments();
+  
+  // Calculate actual pending and inactive members
+  const todayObj = new Date();
+  const todayYear = todayObj.getFullYear();
+  const todayMonth = todayObj.getMonth() + 1;
+  const todayDay = todayObj.getDate();
+  const today = `${todayYear}-${String(todayMonth).padStart(2, '0')}-${String(todayDay).padStart(2, '0')}`;
+  
+  const actualPendingMembers = members.filter(m => !m.completedToday && m.id !== 'current-user');
+  const actualPendingCount = actualPendingMembers.length;
+  
+  // Calculate inactive members (3+ days without completion)
+  const inactiveMembers = members.filter(member => {
+    if (member.id === 'current-user') return false;
+    // For now, we'll use streak as a proxy - if streak is 0, they might be inactive
+    // In a real app, we'd check last completion date
+    return member.streak === 0;
+  });
+  const inactiveCount = inactiveMembers.length;
+  
+  const actualTotalMembers = members.length;
 
-  const handleSendEntireGroup = () => {
-    // TODO: Implement send to entire group
-    alert(`Sending nudge to all ${totalMembers} members`);
+  const handleSendEntireGroup = async () => {
+    if (!canNudge(groupId, undefined, 'entire_group')) {
+      alert('Please wait at least 1 hour before nudging the entire group again.');
+      return;
+    }
+    
+    setIsSending('entire_group');
+    try {
+      const nudge: NudgeRecord = {
+        id: Date.now().toString(),
+        groupId,
+        type: 'entire_group',
+        timestamp: Date.now(),
+      };
+      saveNudge(nudge);
+      
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      alert(`Nudge sent to all ${actualTotalMembers} members!`);
+    } catch (error) {
+      console.error('Error sending nudge:', error);
+      alert('Failed to send nudge. Please try again.');
+    } finally {
+      setIsSending(null);
+    }
   };
 
-  const handleSendPending = () => {
-    // TODO: Implement send to pending members
-    alert(`Sending nudge to ${pendingMembers} member(s) who haven't completed today`);
-  };
-
-  const handleSendInactive = () => {
-    // TODO: Implement send to inactive members
-    alert('Sending encouragement to inactive members');
-  };
-
-  const handleShare = () => {
-    // TODO: Implement share progress functionality
-    if (navigator.share) {
-      navigator.share({
-        title: 'Check out my progress!',
-        text: 'I\'m crushing my morning routine challenge!',
+  const handleSendPending = async () => {
+    if (actualPendingCount === 0) {
+      alert('No pending members to nudge.');
+      return;
+    }
+    
+    setIsSending('pending');
+    try {
+      const nudges: NudgeRecord[] = actualPendingMembers.map(member => ({
+        id: `${Date.now()}-${member.id}`,
+        groupId,
+        memberId: member.id,
+        type: 'pending',
+        timestamp: Date.now(),
+      }));
+      
+      nudges.forEach(nudge => {
+        if (canNudge(groupId, nudge.memberId, 'pending')) {
+          saveNudge(nudge);
+        }
       });
+      
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      alert(`Nudge sent to ${actualPendingCount} pending member(s)!`);
+    } catch (error) {
+      console.error('Error sending nudge:', error);
+      alert('Failed to send nudge. Please try again.');
+    } finally {
+      setIsSending(null);
+    }
+  };
+
+  const handleSendInactive = async () => {
+    if (inactiveCount === 0) {
+      alert('No inactive members to nudge.');
+      return;
+    }
+    
+    setIsSending('inactive');
+    try {
+      const nudges: NudgeRecord[] = inactiveMembers.map(member => ({
+        id: `${Date.now()}-${member.id}`,
+        groupId,
+        memberId: member.id,
+        type: 'inactive',
+        timestamp: Date.now(),
+      }));
+      
+      nudges.forEach(nudge => {
+        if (canNudge(groupId, nudge.memberId, 'inactive')) {
+          saveNudge(nudge);
+        }
+      });
+      
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      alert(`Encouragement sent to ${inactiveCount} inactive member(s)!`);
+    } catch (error) {
+      console.error('Error sending nudge:', error);
+      alert('Failed to send encouragement. Please try again.');
+    } finally {
+      setIsSending(null);
+    }
+  };
+
+  const handleShare = async () => {
+    // Get user's progress
+    const sharedCommitments = commitments.filter(c => c.groupIds?.includes(groupId));
+    const completedToday = sharedCommitments.filter(c => {
+      const completion = completions.find(
+        comp => comp.commitmentId === c.id && comp.date === today && comp.completed
+      );
+      return completion?.completed || false;
+    }).length;
+    
+    const shareText = `I've completed ${completedToday}/${sharedCommitments.length} commitments in ${groupName}! 🎉\n\nJoin me: ${inviteCode || 'Use invite code to join'}`;
+    const shareUrl = inviteCode ? `https://nudgeup.app/join/${inviteCode}` : '';
+    
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Check out my progress!',
+          text: shareText,
+          url: shareUrl,
+        });
+      } catch (error) {
+        // User cancelled or error occurred
+        if ((error as Error).name !== 'AbortError') {
+          console.error('Error sharing:', error);
+        }
+      }
+    } else if (navigator.clipboard) {
+      // Fallback to clipboard
+      try {
+        await navigator.clipboard.writeText(`${shareText}\n${shareUrl}`);
+        alert('Progress copied to clipboard!');
+      } catch (error) {
+        console.error('Error copying to clipboard:', error);
+        alert('Failed to copy. Please try again.');
+      }
     } else {
-      alert('Share your progress feature coming soon!');
+      alert('Sharing is not supported on this device.');
     }
   };
 
@@ -103,7 +290,7 @@ export const SendNudgesSection = ({ totalMembers = 12, pendingMembers = 1 }: Sen
         <div className="flex flex-col gap-3">
           <NudgeCard
             title="Entire Group"
-            description={`Send motivation to all ${totalMembers} members`}
+            description={`Send motivation to all ${actualTotalMembers} members`}
             iconBg="bg-success-100"
             iconPath="/icons/nudges/Icon-1.svg"
             sendIconPath="/icons/nudges/Icon-4.svg"
@@ -111,7 +298,7 @@ export const SendNudgesSection = ({ totalMembers = 12, pendingMembers = 1 }: Sen
           />
           <NudgeCard
             title="Pending Today's Task"
-            description={`Nudge ${pendingMembers} member${pendingMembers > 1 ? 's' : ''} who hasn't completed today`}
+            description={`Nudge ${actualPendingCount} member${actualPendingCount !== 1 ? 's' : ''} who hasn't completed today`}
             iconBg="bg-orange-100"
             iconPath="/icons/nudges/Icon-2.svg"
             sendIconPath="/icons/nudges/Icon-5.svg"

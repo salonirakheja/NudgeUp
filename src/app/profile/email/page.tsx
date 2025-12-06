@@ -1,21 +1,67 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { useAuthContext } from '@/contexts/AuthContext';
 
 export default function EmailSettingsPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('alex.johnson@email.com');
+  const { user } = useAuthContext();
+  const [email, setEmail] = useState(user?.email || '');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (user?.email) {
+      setEmail(user.email);
+    } else if (typeof window !== 'undefined') {
+      // Fallback to localStorage if available
+      const storedEmail = localStorage.getItem('nudgeup_userEmail');
+      if (storedEmail) {
+        setEmail(storedEmail);
+      }
+    }
+  }, [user]);
+
+  const validateEmail = (email: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
 
   const handleSave = async () => {
+    setError('');
+    
+    if (!email.trim()) {
+      setError('Please enter an email address');
+      return;
+    }
+
+    if (!validateEmail(email)) {
+      setError('Please enter a valid email address');
+      return;
+    }
+
     setIsLoading(true);
-    // TODO: Implement actual save logic
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setIsLoading(false);
-    router.back();
+    try {
+      // Store in localStorage as fallback
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('nudgeup_userEmail', email);
+      }
+      
+      // In a real app, we would update via AuthContext or API
+      // For now, we'll just store in localStorage
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      alert('Email updated successfully!');
+      router.back();
+    } catch (error) {
+      console.error('Error updating email:', error);
+      setError('Failed to update email. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -47,9 +93,17 @@ export default function EmailSettingsPage() {
             <Input
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setError('');
+              }}
               placeholder="Enter your email"
             />
+            {error && (
+              <p className="text-red-500 text-sm mt-2" style={{ fontFamily: 'Inter, sans-serif' }}>
+                {error}
+              </p>
+            )}
           </div>
 
           {/* Save Button */}

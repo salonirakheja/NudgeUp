@@ -28,50 +28,117 @@ interface ChallengeInfoCardProps {
 export const ChallengeInfoCard = ({ group, members = [] }: ChallengeInfoCardProps) => {
   const params = useParams();
   const groupId = params.id as string;
-  const { commitments, completions, getCompletionForDate } = useCommitments();
+  const { commitments, completions, getCompletionForDate, getWeeklyCompletionCount } = useCommitments();
   const { groups } = useGroups();
   
   // Get commitments shared with this group (where groupIds array includes this group's id)
   const sharedCommitments = commitments.filter(c => c.groupIds?.includes(groupId));
-  const sharedCommitmentsCount = sharedCommitments.length;
   
-  // Calculate actual progress based on completed commitments today
+  // Separate daily and weekly commitments
+  const dailyCommitments = sharedCommitments.filter(c => !c.frequencyType || c.frequencyType === 'daily');
+  const weeklyCommitments = sharedCommitments.filter(c => c.frequencyType === 'weekly');
+  
+  // Calculate actual progress based on completed commitments
+  // For daily habits: check if completed today
+  // For weekly habits: check if weekly goal is met
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   
-  const completedCommitmentsToday = sharedCommitments.filter(commitment => {
+  // Calculate daily completions
+  const completedDailyCount = dailyCommitments.filter(commitment => {
     const completion = completions.find(
       c => c.commitmentId === commitment.id && c.date === todayStr && c.completed
     );
     return completion?.completed || false;
   }).length;
   
+  // Calculate weekly completions
+  const completedWeeklyCount = weeklyCommitments.filter(commitment => {
+    const weeklyCount = getWeeklyCompletionCount(commitment.id);
+    return weeklyCount >= (commitment.timesPerWeek || 3);
+  }).length;
+  
+  const totalCompletedCount = completedDailyCount + completedWeeklyCount;
+  const totalCommitmentsCount = sharedCommitments.length;
+  
   // Calculate progress: completed commitments / total shared commitments
-  const actualProgress = sharedCommitmentsCount > 0 
-    ? Math.round((completedCommitmentsToday / sharedCommitmentsCount) * 100)
+  const actualProgress = totalCommitmentsCount > 0 
+    ? Math.round((totalCompletedCount / totalCommitmentsCount) * 100)
     : 0;
 
   // Calculate group average completion
   const getMemberCompletionCount = (memberId: string) => {
     if (memberId === 'current-user') {
-      return completedCommitmentsToday;
+      return totalCompletedCount;
     }
     const member = members.find(m => m.id === memberId);
     if (!member) return 0;
-    return sharedCommitments.filter(commitment => 
-      member.commitmentCompletions?.[commitment.id] || false
+    
+    // Count how many commitments this member has completed
+    // For daily: check if completed today
+    // For weekly: we'd need weekly completion data for other members (for now, use commitmentCompletions)
+    let memberDailyCount = 0;
+    let memberWeeklyCount = 0;
+    
+    dailyCommitments.forEach(commitment => {
+      if (member.commitmentCompletions?.[commitment.id]) {
+        memberDailyCount++;
+      }
+    });
+    
+    weeklyCommitments.forEach(commitment => {
+      if (member.commitmentCompletions?.[commitment.id]) {
+        memberWeeklyCount++;
+      }
+    });
+    
+    return memberDailyCount + memberWeeklyCount;
+  };
+
+  const getMemberDailyCount = (memberId: string) => {
+    if (memberId === 'current-user') {
+      return completedDailyCount;
+    }
+    const member = members.find(m => m.id === memberId);
+    if (!member) return 0;
+    return dailyCommitments.filter(commitment => 
+      member.commitmentCompletions?.[commitment.id]
+    ).length;
+  };
+
+  const getMemberWeeklyCount = (memberId: string) => {
+    if (memberId === 'current-user') {
+      return completedWeeklyCount;
+    }
+    const member = members.find(m => m.id === memberId);
+    if (!member) return 0;
+    return weeklyCommitments.filter(commitment => 
+      member.commitmentCompletions?.[commitment.id]
     ).length;
   };
 
   const totalMemberCompletions = members.reduce((sum, member) => 
     sum + getMemberCompletionCount(member.id), 0
   );
+  const totalMemberDailyCompletions = members.reduce((sum, member) => 
+    sum + getMemberDailyCount(member.id), 0
+  );
+  const totalMemberWeeklyCompletions = members.reduce((sum, member) => 
+    sum + getMemberWeeklyCount(member.id), 0
+  );
+  
   const groupAverageCount = members.length > 0 
     ? Math.round(totalMemberCompletions / members.length) 
     : 0;
-  const groupAveragePercent = sharedCommitmentsCount > 0
-    ? Math.round((groupAverageCount / sharedCommitmentsCount) * 100)
+  const groupAverageDailyCount = members.length > 0 && dailyCommitments.length > 0
+    ? Math.round(totalMemberDailyCompletions / members.length)
+    : 0;
+  const groupAverageWeeklyCount = members.length > 0 && weeklyCommitments.length > 0
+    ? Math.round(totalMemberWeeklyCompletions / members.length)
+    : 0;
+  const groupAveragePercent = totalCommitmentsCount > 0
+    ? Math.round((groupAverageCount / totalCommitmentsCount) * 100)
     : 0;
   
   // Get invite code
@@ -97,10 +164,10 @@ export const ChallengeInfoCard = ({ group, members = [] }: ChallengeInfoCardProp
   return (
     <div className="w-full bg-white rounded-2xl shadow-md p-4 flex flex-col gap-3 border border-neutral-100">
       {/* Commitments Count Badge */}
-      {sharedCommitmentsCount > 0 && (
+      {totalCommitmentsCount > 0 && (
         <div className="flex items-center gap-2">
           <span className="px-2.5 py-1 bg-primary-100 text-neutral-700 text-[12px] font-medium leading-[16px] rounded-full whitespace-nowrap flex-shrink-0" style={{ fontFamily: 'Inter, sans-serif' }}>
-            {sharedCommitmentsCount} {sharedCommitmentsCount === 1 ? 'commitment' : 'commitments'}
+            {totalCommitmentsCount} {totalCommitmentsCount === 1 ? 'commitment' : 'commitments'}
           </span>
         </div>
       )}
@@ -118,9 +185,24 @@ export const ChallengeInfoCard = ({ group, members = [] }: ChallengeInfoCardProp
               className="w-4 h-4"
             />
             <span className="text-neutral-700 text-[14px] font-normal leading-[20px]" style={{ fontFamily: 'Inter, sans-serif' }}>
-              {completedCommitmentsToday}/{sharedCommitmentsCount}
+              {totalCompletedCount}/{totalCommitmentsCount}
             </span>
           </div>
+        </div>
+        {/* Show breakdown by type */}
+        <div className="flex flex-col gap-1.5 text-[12px] text-neutral-600" style={{ fontFamily: 'Inter, sans-serif' }}>
+          {dailyCommitments.length > 0 && (
+            <div className="flex justify-between items-center">
+              <span>Daily:</span>
+              <span>{completedDailyCount}/{dailyCommitments.length} completed</span>
+            </div>
+          )}
+          {weeklyCommitments.length > 0 && (
+            <div className="flex justify-between items-center">
+              <span>Weekly:</span>
+              <span>{completedWeeklyCount}/{weeklyCommitments.length} completed</span>
+            </div>
+          )}
         </div>
         <div className="w-full h-2 bg-white/60 rounded-full overflow-hidden">
           <div 
@@ -147,9 +229,24 @@ export const ChallengeInfoCard = ({ group, members = [] }: ChallengeInfoCardProp
                 className="w-4 h-4"
               />
               <span className="text-neutral-700 text-[14px] font-normal leading-[20px]" style={{ fontFamily: 'Inter, sans-serif' }}>
-                {groupAverageCount}/{sharedCommitmentsCount}
+                {groupAverageCount}/{totalCommitmentsCount}
               </span>
             </div>
+          </div>
+          {/* Show breakdown by type */}
+          <div className="flex flex-col gap-1.5 text-[12px] text-neutral-600" style={{ fontFamily: 'Inter, sans-serif' }}>
+            {dailyCommitments.length > 0 && (
+              <div className="flex justify-between items-center">
+                <span>Daily:</span>
+                <span>{groupAverageDailyCount}/{dailyCommitments.length} completed</span>
+              </div>
+            )}
+            {weeklyCommitments.length > 0 && (
+              <div className="flex justify-between items-center">
+                <span>Weekly:</span>
+                <span>{groupAverageWeeklyCount}/{weeklyCommitments.length} completed</span>
+              </div>
+            )}
           </div>
           <div className="w-full h-2 bg-white/60 rounded-full overflow-hidden">
             <div 

@@ -65,28 +65,96 @@ const FriendPill = ({ members, totalCount, onClick }: FriendPillProps) => {
 
 export const GroupCard = ({ group }: GroupCardProps) => {
   const router = useRouter();
-  const { commitments, completions, getCommitmentStreak } = useCommitments();
+  const { commitments, completions, getCommitmentStreak, getWeeklyCompletionCount } = useCommitments();
   const { getGroupMembers } = useGroups();
   
   // Get commitments shared with this group (where groupIds array includes this group's id)
   const sharedCommitments = commitments.filter(c => c.groupIds?.includes(group.id));
   const sharedCommitmentsCount = sharedCommitments.length;
+  
+  // Separate daily and weekly commitments
+  const dailyCommitments = sharedCommitments.filter(c => !c.frequencyType || c.frequencyType === 'daily');
+  const weeklyCommitments = sharedCommitments.filter(c => c.frequencyType === 'weekly');
 
-  // Calculate actual progress based on completed commitments today
+  // Calculate challenge start date
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const totalDays = group.totalDays || 30; // Default to 30 days if not available
+  const daysElapsed = totalDays - group.daysLeft;
   
-  const completedCommitmentsToday = sharedCommitments.filter(commitment => {
-    const completion = completions.find(
-      c => c.commitmentId === commitment.id && c.date === todayStr && c.completed
-    );
-    return completion?.completed || false;
-  }).length;
+  // Calculate start date
+  const startDate = new Date(today);
+  startDate.setDate(today.getDate() - daysElapsed);
+  startDate.setHours(0, 0, 0, 0);
   
-  // Calculate progress percentage: completed commitments / total shared commitments
-  const yourProgressPercent = sharedCommitmentsCount > 0 
-    ? Math.round((completedCommitmentsToday / sharedCommitmentsCount) * 100)
+  // Helper function to format date as YYYY-MM-DD
+  const formatDate = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  };
+  
+  // Calculate "Your Progress" - cumulative days done
+  // Count days where at least one shared commitment was completed
+  let yourCumulativeDays = 0;
+  let dailyCumulativeDays = 0;
+  let weeklyCumulativeDays = 0;
+  const currentDate = new Date(startDate);
+  
+  while (currentDate <= today) {
+    const dateStr = formatDate(currentDate);
+    
+    // Check if at least one daily commitment was completed on this day
+    const hasDailyCompletion = dailyCommitments.some(commitment => {
+      const completion = completions.find(
+        c => c.commitmentId === commitment.id && 
+             c.date === dateStr && 
+             c.completed
+      );
+      return completion?.completed || false;
+    });
+    
+    // Check if at least one weekly commitment was completed on this day
+    const hasWeeklyCompletion = weeklyCommitments.some(commitment => {
+      const completion = completions.find(
+        c => c.commitmentId === commitment.id && 
+             c.date === dateStr && 
+             c.completed
+      );
+      return completion?.completed || false;
+    });
+    
+    // Check if at least one shared commitment was completed on this day
+    const hasCompletion = hasDailyCompletion || hasWeeklyCompletion;
+    
+    if (hasCompletion) {
+      yourCumulativeDays++;
+    }
+    if (hasDailyCompletion) {
+      dailyCumulativeDays++;
+    }
+    if (hasWeeklyCompletion) {
+      weeklyCumulativeDays++;
+    }
+    
+    // Move to next day
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+  
+  // Calculate progress bar percentage for "Your Progress"
+  const yourProgressPercent = daysElapsed > 0 
+    ? Math.min(Math.round((yourCumulativeDays / daysElapsed) * 100), 100)
+    : 0;
+  
+  // Calculate "Group Average" - average cumulative days done
+  // For now, use same calculation as "Your Progress" until member data is available
+  // TODO: Calculate from actual member completion data when available
+  const groupAverageCumulativeDays = yourCumulativeDays;
+  
+  // Calculate progress bar percentage for "Group Average"
+  const groupAveragePercent = daysElapsed > 0
+    ? Math.min(Math.round((groupAverageCumulativeDays / daysElapsed) * 100), 100)
     : 0;
   
   // Get group members
@@ -94,23 +162,27 @@ export const GroupCard = ({ group }: GroupCardProps) => {
   const otherMembers = groupMembers.filter(m => m.id !== 'current-user');
   const totalOtherMembers = otherMembers.length;
   
-  // Calculate group average from all members (mock calculation for now)
-  // In real app, would calculate from actual member completions
-  const groupAveragePercent = yourProgressPercent;
-  const groupAverageCount = completedCommitmentsToday;
-  
   // Determine status message based on progress comparison
-  const pendingCount = sharedCommitmentsCount - completedCommitmentsToday;
+  // Calculate today's completion for status message
+  const todayStr = formatDate(today);
+  const completedToday = sharedCommitments.filter(commitment => {
+    const completion = completions.find(
+      c => c.commitmentId === commitment.id && c.date === todayStr && c.completed
+    );
+    return completion?.completed || false;
+  }).length;
+  const pendingCount = sharedCommitmentsCount - completedToday;
+  
   let statusMessage = '';
   let showStatus = false;
   if (sharedCommitmentsCount > 0) {
-    if (completedCommitmentsToday > groupAverageCount) {
+    if (yourCumulativeDays > groupAverageCumulativeDays) {
       statusMessage = "You're ahead of the group! 🎉";
       showStatus = true;
-    } else if (completedCommitmentsToday === groupAverageCount) {
-      statusMessage = `Today: ${completedCommitmentsToday} completed · ${pendingCount} pending`;
+    } else if (yourCumulativeDays === groupAverageCumulativeDays) {
+      statusMessage = `Today: ${completedToday} completed · ${pendingCount} pending`;
       showStatus = true;
-    } else if (completedCommitmentsToday < groupAverageCount) {
+    } else if (yourCumulativeDays < groupAverageCumulativeDays) {
       statusMessage = "Running behind the group";
       showStatus = true;
     }
@@ -206,7 +278,7 @@ export const GroupCard = ({ group }: GroupCardProps) => {
 
   const handleShareProgress = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const progressText = `I've completed ${completedCommitmentsToday}/${sharedCommitmentsCount} commitments in ${group.name}! Join me: ${inviteLink}`;
+    const progressText = `I've completed ${yourCumulativeDays} days in ${group.name}! Join me: ${inviteLink}`;
     if (navigator.share) {
       navigator.share({
         title: `My progress in ${group.name}`,
@@ -276,113 +348,115 @@ export const GroupCard = ({ group }: GroupCardProps) => {
         )}
       </div>
 
-      {/* Progress Section - Tighter spacing */}
-      <div className="px-6 pt-2.5 flex flex-col gap-2.5">
+      {/* Progress Section - Match ChallengeInfoCard layout */}
+      <div className="px-6 pt-4 flex flex-col gap-3">
+        {/* Commitments Count Badge */}
+        {sharedCommitmentsCount > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-1 bg-primary-100 text-neutral-700 text-[12px] font-medium leading-[16px] rounded-full whitespace-nowrap flex-shrink-0" style={{ fontFamily: 'Inter, sans-serif' }}>
+              {sharedCommitmentsCount} {sharedCommitmentsCount === 1 ? 'commitment' : 'commitments'}
+            </span>
+          </div>
+        )}
+
         {/* Your Progress */}
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-2">
           <div className="flex justify-between items-center">
-            <span className="text-neutral-700 text-[14px] font-medium leading-[20px]" style={{ fontFamily: 'Inter, sans-serif' }}>
+            <span className="text-primary-600 text-[14px] font-medium leading-[20px]" style={{ fontFamily: 'Inter, sans-serif' }}>
               Your Progress
             </span>
             <div className="flex items-center gap-1">
-              {/* Green fire icon from home page */}
               <img 
                 src="/icons/Calendar/Icon-4.svg" 
                 alt="Streak" 
-                className="w-3.5 h-3.5"
+                className="w-4 h-4"
               />
               <span className="text-neutral-700 text-[14px] font-normal leading-[20px]" style={{ fontFamily: 'Inter, sans-serif' }}>
-                {completedCommitmentsToday}
+                {yourCumulativeDays} days
               </span>
             </div>
           </div>
-          <div className="w-full h-1.5 bg-neutral-100 rounded-full overflow-hidden">
+          {/* Show breakdown by type - Calculate for cumulative */}
+          <div className="flex flex-col gap-1.5 text-[12px] text-neutral-600" style={{ fontFamily: 'Inter, sans-serif' }}>
+            {dailyCommitments.length > 0 && (
+              <div className="flex justify-between items-center">
+                <span>Daily:</span>
+                <span>{dailyCumulativeDays}/{daysElapsed} completed</span>
+              </div>
+            )}
+            {weeklyCommitments.length > 0 && (
+              <div className="flex justify-between items-center">
+                <span>Weekly:</span>
+                <span>{weeklyCumulativeDays}/{daysElapsed} completed</span>
+              </div>
+            )}
+          </div>
+          <div className="w-full h-2 bg-white/60 rounded-full overflow-hidden">
             <div 
-              className="h-1.5 bg-[#BDC225] rounded-full transition-all"
+              className="h-2 bg-success-400 rounded-full transition-all"
               style={{ width: `${Math.min(yourProgressPercent, 100)}%` }}
             />
           </div>
         </div>
 
-        {/* Group Average */}
-        <div className="flex flex-col gap-1.5">
-          <div className="flex justify-between items-center">
-            <span className="text-neutral-700 text-[14px] font-medium leading-[20px]" style={{ fontFamily: 'Inter, sans-serif' }}>
-              Group Avg
-            </span>
-            <div className="flex items-center gap-1">
-              {/* Green fire icon from home page */}
+        {/* Group Performance Summary */}
+        {groupMembers.length > 0 && (
+          <div className="flex flex-col gap-2 pt-1 border-t border-neutral-100">
+            <div className="text-neutral-500 text-[12px] font-medium leading-[16px] uppercase tracking-wide" style={{ fontFamily: 'Inter, sans-serif' }}>
+              Group Performance
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-neutral-600 text-[13px] font-normal leading-[18px]" style={{ fontFamily: 'Inter, sans-serif' }}>
+                Group Average
+              </span>
+              <div className="flex items-center gap-1">
               <img 
                 src="/icons/Calendar/Icon-4.svg" 
                 alt="Streak" 
-                className="w-3.5 h-3.5"
+                className="w-4 h-4"
               />
-              <span className="text-neutral-700 text-[14px] font-normal leading-[20px]" style={{ fontFamily: 'Inter, sans-serif' }}>
-                {groupAverageCount}
-              </span>
+                <span className="text-neutral-700 text-[14px] font-normal leading-[20px]" style={{ fontFamily: 'Inter, sans-serif' }}>
+                  {groupAverageCumulativeDays} days
+                </span>
+              </div>
+            </div>
+            {/* Show breakdown by type */}
+            <div className="flex flex-col gap-1.5 text-[12px] text-neutral-600" style={{ fontFamily: 'Inter, sans-serif' }}>
+              {dailyCommitments.length > 0 && (
+                <div className="flex justify-between items-center">
+                  <span>Daily:</span>
+                  <span>{dailyCumulativeDays}/{daysElapsed} completed</span>
+                </div>
+              )}
+              {weeklyCommitments.length > 0 && (
+                <div className="flex justify-between items-center">
+                  <span>Weekly:</span>
+                  <span>{weeklyCumulativeDays}/{daysElapsed} completed</span>
+                </div>
+              )}
+            </div>
+            <div className="w-full h-2 bg-white/60 rounded-full overflow-hidden">
+              <div 
+                className="h-2 bg-primary-500 rounded-full transition-all"
+                style={{ width: `${Math.min(groupAveragePercent, 100)}%` }}
+              />
             </div>
           </div>
-          <div className="w-full h-1.5 bg-neutral-100 rounded-full overflow-hidden">
-            <div 
-              className="h-1.5 bg-[#BDC225] rounded-full transition-all"
-              style={{ width: `${Math.min(groupAveragePercent, 100)}%` }}
-            />
-          </div>
-        </div>
+        )}
       </div>
 
-      {/* Status Message Banner with Friend Pill - Clean text-only style */}
-      {showStatus && (
-        <div className="px-6 pt-1.5 pb-3 flex items-center justify-between gap-2">
-          <div className="flex-1 min-w-0">
-            {statusMessage.includes('Today:') ? (
-              <span className="text-neutral-600 text-[13px] font-normal leading-[18px]" style={{ fontFamily: 'Inter, sans-serif' }}>
-                <span className="font-semibold">Today:</span> <span className="font-semibold text-neutral-700">{completedCommitmentsToday}</span> completed · <span className="text-neutral-500">{pendingCount}</span> pending
-              </span>
-            ) : (
-              <span className="text-neutral-600 text-[13px] font-normal leading-[18px] truncate" style={{ fontFamily: 'Inter, sans-serif' }}>
-                {statusMessage}
-              </span>
-            )}
-          </div>
-          <FriendPill
-            members={otherMembers.slice(0, 2)}
-            totalCount={totalOtherMembers}
-            onClick={handleShareInvite}
-          />
-        </div>
-      )}
-
-      {/* Share Progress Button - Text-only, reduced height, softer green */}
-      {sharedCommitmentsCount > 0 && (
-        <div className="px-6 pt-3 pb-3.5">
-          <button
-            onClick={handleShareProgress}
-            className="w-full h-7 bg-[#BDC225] text-white rounded-full font-medium hover:opacity-90 transition-opacity flex items-center justify-center"
-            style={{ fontFamily: 'Inter, sans-serif' }}
-          >
-            <span className="text-[13px] font-medium">Share Progress</span>
-          </button>
-        </div>
-      )}
-
-      {/* Context Lines - Subtle divider above footer */}
-      {contextLines.length > 0 && (
-        <>
-          <div className="mx-6 h-px bg-neutral-100"></div>
-          <div className="px-6 pb-3.5 pt-2.5 flex flex-col gap-1.5">
-            {contextLines.map((line, index) => (
-              <span 
-                key={index}
-                className="text-neutral-500 text-[12px] font-normal leading-[16px]" 
-                style={{ fontFamily: 'Inter, sans-serif' }}
-              >
-                {line}
-              </span>
-            ))}
-          </div>
-        </>
-      )}
+      {/* Invite Button Row - Match ChallengeInfoCard */}
+      <div className="px-6 pt-2 pb-4 flex justify-end items-center">
+        <button
+          onClick={handleShareInvite}
+          className="w-10 h-10 rounded-full flex items-center justify-center shadow-sm hover:shadow-md transition-shadow flex-shrink-0 bg-alert-400"
+          title="Invite people to group"
+        >
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M15 6.66667L10 11.6667L5 6.66667M2.5 4.16667H17.5C18.1904 4.16667 18.75 4.72623 18.75 5.41667V14.5833C18.75 15.2738 18.1904 15.8333 17.5 15.8333H2.5C1.80964 15.8333 1.25 15.2738 1.25 14.5833V5.41667C1.25 4.72623 1.80964 4.16667 2.5 4.16667Z" stroke="white" strokeWidth="1.67" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+      </div>
     </div>
   );
 };

@@ -1,0 +1,124 @@
+# Cursor Rules for NudgeUp
+
+## Critical Rule - DO NOT CHANGE UNPROMPTED CODE
+
+**NEVER modify, refactor, optimize, or change any code, files, configurations, or dependencies that were not explicitly requested by the user.**
+
+- Only make changes that are directly requested
+- Do not "improve" or "fix" code unless explicitly asked
+- Do not add features, optimizations, or refactorings unless requested
+- Do not update dependencies or configurations unless requested
+- Do not add comments, documentation, or formatting changes unless requested
+- Do not fix linting errors unless explicitly asked
+- If you see potential improvements, mention them but DO NOT implement them
+
+## Project Overview
+
+This is a Next.js 16 application using:
+- **Framework**: Next.js 16 with App Router
+- **React**: React 19
+- **Language**: TypeScript (strict mode)
+- **Styling**: Tailwind CSS
+- **Backend**: InstantDB (@instantdb/react)
+- **Font**: Inter (sans-serif)
+
+## Code Style & Structure
+
+### TypeScript
+- Use strict TypeScript with proper type definitions
+- Define interfaces/types in `src/types/index.ts` for shared types
+- Use explicit types for function parameters and return values
+- Avoid `any` types - use proper types or `unknown` when necessary
+- Export types/interfaces from components when they're component-specific
+
+### React Components
+- Use functional components with hooks
+- Add `'use client'` directive at the top of all client components
+- Use PascalCase for component names
+- Export components as named exports (e.g., `export const ComponentName`)
+- Use TypeScript interfaces for component props (e.g., `ComponentNameProps`)
+
+### File Organization
+- **Pages**: `src/app/` - Next.js App Router pages
+- **Components**: `src/components/` - Organized by feature/domain
+  - `auth/` - Authentication components
+  - `calendar/` - Calendar-related components
+  - `check-in/` - Check-in page components
+  - `groups/` - Group-related components
+  - `layout/` - Layout components (e.g., BottomNav)
+  - `members/` - Member profile components
+  - `profile/` - Profile page components
+  - `providers/` - React context providers
+  - `ui/` - Reusable UI components (Button, Input, Logo)
+- **Contexts**: `src/contexts/` - React context providers
+- **Types**: `src/types/` - Shared TypeScript type definitions
+- **Lib**: `src/lib/` - Utility functions and third-party integrations (e.g., InstantDB setup)
+
+### Styling with Tailwind CSS
+- Use Tailwind utility classes for all styling
+- Use inline `style` prop only for dynamic values (e.g., `fontFamily: 'Inter, sans-serif'`)
+- Follow existing patterns for spacing, colors, and responsive design
+- Use semantic color names from Tailwind (e.g., `neutral-50`, `neutral-100`, `primary-500`)
+- Maintain consistent border radius (e.g., `rounded-2xl`, `rounded-xl`)
+
+### InstantDB Patterns
+- Use `useQuery` hook for data fetching
+- Use `useAuth` hook for authentication state
+- Use `tx` (transaction) for mutations
+- Use `id()` for generating IDs
+- Initialize InstantDB in `src/lib/instant.ts`
+- Handle SSR by checking `typeof window !== 'undefined'`
+- Use proper schema types defined in `src/lib/instant.ts`
+
+### Context Patterns
+- Create contexts in `src/contexts/` directory
+- Export both the Provider component and a custom hook (e.g., `useAuthContext`)
+- Use proper TypeScript types for context values
+- Handle loading states appropriately
+
+### Naming Conventions
+- Components: PascalCase (e.g., `DateHabitsModal`)
+- Files: Match component name (e.g., `DateHabitsModal.tsx`)
+- Functions: camelCase (e.g., `getCompletionForDate`)
+- Variables: camelCase (e.g., `selectedDate`)
+- Types/Interfaces: PascalCase (e.g., `Commitment`, `GroupMember`)
+- Props interfaces: ComponentName + Props (e.g., `DateHabitsModalProps`)
+
+### Date Handling
+- Use ISO date strings (YYYY-MM-DD format) for dates
+- Parse dates carefully to avoid timezone issues
+- Use `Date` constructor with explicit year, month, day when parsing YYYY-MM-DD
+
+### State Management
+- Use React hooks (`useState`, `useEffect`) for local component state
+- Use Context API for shared state across components
+- Use InstantDB queries for server state
+
+## Best Practices
+
+1. **Preserve Existing Patterns**: Follow the existing code structure and patterns in the codebase
+2. **Type Safety**: Always use proper TypeScript types
+3. **Error Handling**: Include proper error handling for async operations
+4. **Loading States**: Handle loading states appropriately
+5. **Accessibility**: Maintain accessibility standards (though not explicitly requested, preserve existing patterns)
+6. **Performance**: Use React best practices (memoization when needed, but only if requested)
+
+## What NOT to Do
+
+- Do not add new dependencies unless explicitly requested
+- Do not refactor existing code unless explicitly requested
+- Do not change file structure or organization unless explicitly requested
+- Do not add new features or functionality unless explicitly requested
+- Do not optimize or improve code unless explicitly requested
+- Do not add tests unless explicitly requested
+- Do not add documentation files unless explicitly requested
+- Do not change styling patterns unless explicitly requested
+- Do not modify configuration files unless explicitly requested
+
+## When in Doubt
+
+If you're unsure whether to make a change:
+1. Ask the user for clarification
+2. Only make changes that are explicitly requested
+3. Preserve existing code patterns and structure
+

@@ -27,7 +27,38 @@ export const UnifiedCommitmentCard = ({ commitment, members, totalMembers }: Uni
   const router = useRouter();
   const params = useParams();
   const groupId = params.id as string;
-  const { getCompletionForDate } = useCommitments();
+  const { getCompletionForDate, getCommitmentStreak, completions } = useCommitments();
+  
+  // Calculate streak dynamically from completions to ensure consistency
+  // Calculate directly here to ensure we always use the latest completions array
+  const calculatedStreak = (() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    let streak = 0;
+    let currentDate = new Date(today);
+
+    // Check backwards from today
+    while (true) {
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth() + 1;
+      const day = currentDate.getDate();
+      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      
+      const completion = completions.find(
+        (c) => c.commitmentId === commitment.id && c.date === dateStr && c.completed
+      );
+
+      if (completion?.completed) {
+        streak++;
+        currentDate.setDate(currentDate.getDate() - 1);
+        currentDate.setHours(0, 0, 0, 0);
+      } else {
+        break;
+      }
+    }
+
+    return streak;
+  })();
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
@@ -56,25 +87,124 @@ export const UnifiedCommitmentCard = ({ commitment, members, totalMembers }: Uni
     router.push(`/groups/${groupId}/members/${memberId}`);
   };
 
+  // Check if a member can be nudged
+  const canNudgeMember = (memberId: string): boolean => {
+    // Can't nudge yourself
+    if (memberId === 'current-user') {
+      return false;
+    }
+    
+    // Can't nudge if already nudged
+    if (nudgedMembers.has(memberId)) {
+      return false;
+    }
+    
+    // Can't nudge if currently nudging
+    if (nudgingMember === memberId) {
+      return false;
+    }
+    
+    // Check rate limiting (1 hour cooldown)
+    const STORAGE_KEY_NUDGES = 'nudgeup_nudges';
+    const stored = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY_NUDGES) : null;
+    if (stored) {
+      const nudges = JSON.parse(stored);
+      const now = Date.now();
+      const oneHour = 60 * 60 * 1000;
+      
+      const recentNudge = nudges.find((n: any) => 
+        n.groupId === groupId && 
+        n.memberId === memberId && 
+        n.commitmentId === commitment.id &&
+        n.type === 'individual' &&
+        (now - n.timestamp) < oneHour
+      );
+      
+      if (recentNudge) {
+        return false;
+      }
+    }
+    
+    return true;
+  };
+
   const handleNudge = async (memberId: string) => {
     setNudgingMember(memberId);
     
-    // TODO: Implement actual nudge API call
-    await new Promise(resolve => setTimeout(resolve, 500)); // Simulate API call
-    
-    setNudgedMembers(prev => new Set(prev).add(memberId));
-    setNudgingMember(null);
+    try {
+      // Check if we can nudge (prevent spam)
+      const STORAGE_KEY_NUDGES = 'nudgeup_nudges';
+      const stored = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY_NUDGES) : null;
+      const nudges = stored ? JSON.parse(stored) : [];
+      const now = Date.now();
+      const oneHour = 60 * 60 * 1000;
+      
+      const recentNudge = nudges.find((n: any) => 
+        n.groupId === groupId && 
+        n.memberId === memberId && 
+        n.commitmentId === commitment.id &&
+        (now - n.timestamp) < oneHour
+      );
+      
+      if (recentNudge) {
+        alert('Please wait at least 1 hour before nudging this member again.');
+        setNudgingMember(null);
+        return;
+      }
+      
+      // Save nudge record
+      const nudge = {
+        id: `${Date.now()}-${memberId}-${commitment.id}`,
+        groupId,
+        memberId,
+        commitmentId: commitment.id,
+        type: 'individual',
+        timestamp: now,
+      };
+      
+      if (typeof window !== 'undefined') {
+        nudges.push(nudge);
+        localStorage.setItem(STORAGE_KEY_NUDGES, JSON.stringify(nudges));
+      }
+      
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      setNudgedMembers(prev => new Set(prev).add(memberId));
+    } catch (error) {
+      console.error('Error sending nudge:', error);
+      alert('Failed to send nudge. Please try again.');
+    } finally {
+      setNudgingMember(null);
+    }
   };
 
-  const handleShareProgress = () => {
-    // TODO: Implement share progress functionality
+  const handleShareProgress = async () => {
+    const shareText = `I've completed ${commitment.name} with a ${calculatedStreak}-day streak! 🔥\n\nJoin me in this challenge!`;
+    
     if (navigator.share) {
-      navigator.share({
-        title: `My progress in ${commitment.name}`,
-        text: `I've completed ${commitment.name}! Join me in this challenge.`,
-      });
+      try {
+        await navigator.share({
+          title: `My progress in ${commitment.name}`,
+          text: shareText,
+        });
+      } catch (error) {
+        // User cancelled or error occurred
+        if ((error as Error).name !== 'AbortError') {
+          console.error('Error sharing:', error);
+        }
+      }
+    } else if (navigator.clipboard) {
+      // Fallback to clipboard
+      try {
+        await navigator.clipboard.writeText(shareText);
+        alert('Progress copied to clipboard!');
+      } catch (error) {
+        console.error('Error copying to clipboard:', error);
+        alert('Failed to copy. Please try again.');
+      }
     } else {
-      alert('Share your progress feature coming soon!');
+      alert('Sharing is not supported on this device.');
     }
   };
 
@@ -103,11 +233,11 @@ export const UnifiedCommitmentCard = ({ commitment, members, totalMembers }: Uni
           </div>
 
           {/* Title and Streak */}
-          <div className="flex-1 flex flex-col gap-1 min-w-0">
-            <div className="text-neutral-700 text-[16px] font-normal leading-[24px] truncate" style={{ fontFamily: 'Inter, sans-serif' }}>
+          <div className="flex-1 flex flex-col gap-1 min-w-0 items-start">
+            <div className="text-neutral-700 text-[16px] font-normal leading-[24px] truncate text-left w-full" style={{ fontFamily: 'Inter, sans-serif' }}>
               {commitment.name}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 justify-start">
               <img 
                 src="/icons/Check-In Page/Icon-4.svg" 
                 alt="Streak" 
@@ -117,7 +247,7 @@ export const UnifiedCommitmentCard = ({ commitment, members, totalMembers }: Uni
                 }}
               />
               <span className="text-success-600 text-[13px] font-medium leading-[18px]" style={{ fontFamily: 'Inter, sans-serif' }}>
-                {commitment.streak} day streak
+                {calculatedStreak} day streak
               </span>
             </div>
           </div>
@@ -170,100 +300,94 @@ export const UnifiedCommitmentCard = ({ commitment, members, totalMembers }: Uni
               {members.map((member) => {
                 const isCompleted = getMemberCommitmentCompletion(member.id);
                 const displayName = getMemberDisplayName(member.id, member.name);
+                const isCurrentUser = member.id === 'current-user';
+                const isNudged = nudgedMembers.has(member.id);
+                const isNudging = nudgingMember === member.id;
+                // Button is active (enabled) only if member has NOT checked in today
+                const isNudgeActive = !isCompleted && !isCurrentUser;
+                // Check if we can actually nudge (rate limiting, etc.)
+                const canNudge = isNudgeActive && canNudgeMember(member.id);
+                
                 return (
                   <div
                     key={member.id}
-                    onClick={() => handleMemberClick(member.id)}
-                    className="flex items-center gap-2 px-2 py-1 hover:bg-neutral-50 rounded-lg transition-colors cursor-pointer"
+                    className="flex items-center gap-2 px-2 py-1 hover:bg-neutral-50 rounded-lg transition-colors"
                   >
-                    <span className="text-[16px]">{member.avatar}</span>
-                    <span className="text-neutral-700 text-[14px] font-normal leading-[20px] flex-1" style={{ fontFamily: 'Inter, sans-serif' }}>
-                      {displayName}
-                    </span>
-                    <span className="text-neutral-500 text-[13px] font-normal leading-[18px]" style={{ fontFamily: 'Inter, sans-serif' }}>
-                      {isCompleted ? 'Done' : 'Not done'}
-                    </span>
-                    {/* Status Icon */}
-                    <div className="w-4 h-4 flex justify-center items-center">
-                      {isCompleted ? (
-                        <div className="w-3 h-3 bg-primary-500 rounded-full flex justify-center items-center">
-                          <svg width="8" height="8" viewBox="0 0 8 8" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M6.5 2L3.5 5.5L1.5 4" stroke="white" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
-                          </svg>
-                        </div>
-                      ) : (
-                        <div className="w-3 h-3 bg-neutral-300 rounded-full"></div>
-                      )}
+                    <div
+                      onClick={() => handleMemberClick(member.id)}
+                      className="flex items-center gap-2 flex-1 cursor-pointer"
+                    >
+                      <span className="text-[16px]">{member.avatar}</span>
+                      <span className="text-neutral-700 text-[14px] font-normal leading-[20px] flex-1" style={{ fontFamily: 'Inter, sans-serif' }}>
+                        {displayName}
+                      </span>
+                      <span className="text-neutral-500 text-[13px] font-normal leading-[18px]" style={{ fontFamily: 'Inter, sans-serif' }}>
+                        {isCompleted ? 'Done' : 'Not done'}
+                      </span>
+                      {/* Status Icon */}
+                      <div className="w-4 h-4 flex justify-center items-center">
+                        {isCompleted ? (
+                          <div className="w-3 h-3 bg-primary-500 rounded-full flex justify-center items-center">
+                            <svg width="8" height="8" viewBox="0 0 8 8" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M6.5 2L3.5 5.5L1.5 4" stroke="white" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          </div>
+                        ) : (
+                          <div className="w-3 h-3 bg-neutral-300 rounded-full"></div>
+                        )}
+                      </div>
                     </div>
+                    
+                    {/* Inline Nudge Button - Show for all members except current user */}
+                    {!isCurrentUser && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          if (isNudgeActive && canNudge && !isNudging) {
+                            handleNudge(member.id);
+                          } else if (!isNudgeActive) {
+                            // Show message if member has checked in
+                            alert(`${displayName} has already checked in today.`);
+                          }
+                        }}
+                        disabled={!isNudgeActive || isNudging}
+                        type="button"
+                        className={`
+                          flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[12px] font-medium flex-shrink-0 min-w-[70px] justify-center
+                          ${isNudged 
+                            ? 'bg-success-50 text-success-600 border border-success-200' 
+                            : isNudgeActive && canNudge
+                            ? 'bg-primary-100 text-primary-700 hover:bg-primary-200 border border-primary-300 cursor-pointer'
+                            : 'bg-neutral-100 text-neutral-400 border border-neutral-300 cursor-not-allowed'
+                          }
+                          ${isNudging ? 'opacity-50 cursor-wait' : ''}
+                        `}
+                        style={{ fontFamily: 'Inter, sans-serif' }}
+                        title={isCompleted ? 'Member has checked in' : isNudged ? 'Already nudged' : isNudgeActive ? 'Send nudge' : 'Member has checked in'}
+                      >
+                        {isNudged ? (
+                          <>
+                            <span>Nudged</span>
+                            <svg width="12" height="12" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M11.5 3.5L5.5 9.5L2.5 6.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          </>
+                        ) : (
+                          <>
+                            <span>Nudge</span>
+                            <svg width="12" height="12" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M5 3.5L9 7L5 10.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          </>
+                        )}
+                      </button>
+                    )}
                   </div>
                 );
               })}
             </div>
           </div>
-
-          {/* Soft Separator */}
-          {pendingCount > 0 && (
-            <div className="h-px bg-neutral-300 opacity-10"></div>
-          )}
-
-          {/* Section 2: Nudges - Only show if someone is pending */}
-          {pendingCount > 0 && (
-            <div className="flex flex-col gap-1.5">
-              <div className="text-neutral-500 text-[12px] font-medium leading-[16px] uppercase tracking-wide" style={{ fontFamily: 'Inter, sans-serif' }}>
-                Send Nudges
-              </div>
-              <div className="text-neutral-500 text-[12px] font-normal leading-[16px]" style={{ fontFamily: 'Inter, sans-serif' }}>
-                ({pendingCount} {pendingCount === 1 ? 'member hasn' : 'members haven'} checked in yet)
-              </div>
-              
-              {/* Nudge Chips */}
-              <div className="flex flex-col gap-1">
-                {pendingMembers.map((member) => {
-                  const isNudged = nudgedMembers.has(member.id);
-                  const isNudging = nudgingMember === member.id;
-                  const displayName = getMemberDisplayName(member.id, member.name);
-                  
-                  return (
-                    <button
-                      key={member.id}
-                      onClick={() => !isNudged && handleNudge(member.id)}
-                      disabled={isNudged || isNudging}
-                      className={`
-                        w-full flex items-center justify-between px-3 py-2 rounded-lg transition-all
-                        ${isNudged 
-                          ? 'bg-success-50 border border-success-200' 
-                          : 'bg-neutral-50 hover:bg-neutral-100 border border-transparent'
-                        }
-                        ${isNudging ? 'opacity-50' : ''}
-                      `}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-[16px]">{member.avatar}</span>
-                        <span className="text-neutral-700 text-[14px] font-normal leading-[20px]" style={{ fontFamily: 'Inter, sans-serif' }}>
-                          {displayName}
-                        </span>
-                      </div>
-                      {isNudged ? (
-                        <div className="flex items-center gap-1.5 text-success-600 text-[13px] font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>
-                          <span>Nudged</span>
-                          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" className="animate-in fade-in duration-200">
-                            <path d="M11.5 3.5L5.5 9.5L2.5 6.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                          </svg>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1 text-neutral-500 text-[13px] font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>
-                          <span>Nudge</span>
-                          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M5 3.5L9 7L5 10.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                          </svg>
-                        </div>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
 
           {/* Share Progress Button - Always at bottom for consistency */}
           <button

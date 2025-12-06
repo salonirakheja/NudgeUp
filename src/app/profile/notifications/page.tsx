@@ -1,20 +1,47 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
+
+const STORAGE_KEY_NOTIFICATIONS = 'nudgeup_notificationSettings';
+
+interface NotificationSettings {
+  habitReminders: boolean;
+  groupUpdates: boolean;
+  achievementAlerts: boolean;
+  weeklyReports: boolean;
+}
+
+const defaultSettings: NotificationSettings = {
+  habitReminders: true,
+  groupUpdates: true,
+  achievementAlerts: true,
+  weeklyReports: false,
+};
+
+const loadSettings = (): NotificationSettings => {
+  if (typeof window === 'undefined') return defaultSettings;
+  const stored = localStorage.getItem(STORAGE_KEY_NOTIFICATIONS);
+  return stored ? JSON.parse(stored) : defaultSettings;
+};
+
+const saveSettings = (settings: NotificationSettings) => {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(STORAGE_KEY_NOTIFICATIONS, JSON.stringify(settings));
+  }
+};
 
 export default function NotificationsPage() {
   const router = useRouter();
-  const [settings, setSettings] = useState({
-    habitReminders: true,
-    groupUpdates: true,
-    achievementAlerts: true,
-    weeklyReports: false,
-  });
+  const [settings, setSettings] = useState<NotificationSettings>(defaultSettings);
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleToggle = (key: keyof typeof settings) => {
+  useEffect(() => {
+    setSettings(loadSettings());
+  }, []);
+
+  const handleToggle = (key: keyof NotificationSettings) => {
     setSettings(prev => ({
       ...prev,
       [key]: !prev[key],
@@ -23,10 +50,17 @@ export default function NotificationsPage() {
 
   const handleSave = async () => {
     setIsLoading(true);
-    // TODO: Implement actual save logic
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setIsLoading(false);
-    router.back();
+    try {
+      saveSettings(settings);
+      await new Promise(resolve => setTimeout(resolve, 500));
+      alert('Notification settings saved!');
+      router.back();
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      alert('Failed to save settings. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

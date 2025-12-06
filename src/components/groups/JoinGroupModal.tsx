@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { useGroups } from '@/contexts/GroupsContext';
 
 interface JoinGroupModalProps {
   isOpen: boolean;
@@ -13,27 +14,78 @@ interface JoinGroupModalProps {
 export const JoinGroupModal = ({ isOpen, onClose, onJoin }: JoinGroupModalProps) => {
   const [codeOrLink, setCodeOrLink] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const { groups, getUserGroups, addMemberToGroup } = useGroups();
 
   if (!isOpen) return null;
 
+  const extractInviteCode = (input: string): string => {
+    const trimmed = input.trim();
+    
+    // If it's a URL, extract the code from the path
+    if (trimmed.includes('/join/')) {
+      const parts = trimmed.split('/join/');
+      return parts[parts.length - 1].split('?')[0].split('#')[0];
+    }
+    
+    // If it's just a code, return it
+    return trimmed.toUpperCase();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
     
     if (!codeOrLink.trim()) {
-      alert('Please enter a group code or link');
+      setError('Please enter a group code or link');
       return;
     }
 
     setIsLoading(true);
     try {
-      // TODO: Add actual API call to join group
-      await new Promise(resolve => setTimeout(resolve, 500)); // Simulate network delay
-      onJoin(codeOrLink.trim());
+      const inviteCode = extractInviteCode(codeOrLink);
+      
+      // Find group by invite code
+      const allGroups = getUserGroups();
+      const group = allGroups.find(g => g.inviteCode === inviteCode);
+      
+      if (!group) {
+        setError('Invalid group code. Please check and try again.');
+        setIsLoading(false);
+        return;
+      }
+      
+      // Check if user is already a member
+      const currentUser = {
+        id: 'current-user',
+        name: typeof window !== 'undefined' ? (localStorage.getItem('nudgeup_userName') || 'You') : 'You',
+        avatar: typeof window !== 'undefined' ? (localStorage.getItem('nudgeup_userAvatar') || '😊') : '😊',
+        completedToday: false,
+        streak: 0,
+        memberSince: new Date().toISOString(),
+      };
+      
+      const isAlreadyMember = group.memberList?.some(m => m.id === 'current-user');
+      if (isAlreadyMember) {
+        setError('You are already a member of this group.');
+        setIsLoading(false);
+        return;
+      }
+      
+      // Add user to group
+      addMemberToGroup(group.id, currentUser);
+      
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      onJoin(inviteCode);
       setCodeOrLink('');
+      setError('');
       onClose();
+      alert(`Successfully joined ${group.name}! 🎉`);
     } catch (error) {
       console.error('Error joining group:', error);
-      alert('Failed to join group. Please try again.');
+      setError('Failed to join group. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -67,9 +119,17 @@ export const JoinGroupModal = ({ isOpen, onClose, onJoin }: JoinGroupModalProps)
               type="text"
               placeholder="e.g., ABC123 or https://nudgeup.app/join/ABC123"
               value={codeOrLink}
-              onChange={(e) => setCodeOrLink(e.target.value)}
+              onChange={(e) => {
+                setCodeOrLink(e.target.value);
+                setError('');
+              }}
               className="w-full"
             />
+            {error && (
+              <p className="text-red-500 text-sm mt-2" style={{ fontFamily: 'Inter, sans-serif' }}>
+                {error}
+              </p>
+            )}
           </div>
 
           {/* Buttons */}

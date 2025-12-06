@@ -9,6 +9,9 @@ export interface Commitment {
   createdAt: string; // ISO date string
   duration?: number; // Optional challenge duration in days
   groupIds?: string[]; // Array of group IDs if commitment is shared with groups
+  frequencyType?: 'daily' | 'weekly'; // Frequency type: daily (default) or weekly
+  timesPerWeek?: number; // For weekly habits: how many times per week (e.g., 3)
+  weeklyStreak?: number; // For weekly habits: consecutive weeks completed
 }
 
 export interface CommitmentCompletion {

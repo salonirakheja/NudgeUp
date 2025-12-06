@@ -1,5 +1,7 @@
 'use client';
 
+import { useCommitments } from '@/contexts/CommitmentsContext';
+
 interface Commitment {
   id: string;
   name: string;
@@ -13,6 +15,7 @@ interface SharedHabitsListProps {
 }
 
 export const SharedHabitsList = ({ habits }: SharedHabitsListProps) => {
+  const { getCommitmentStreak } = useCommitments();
   return (
     <div className="w-full flex flex-col gap-4">
       <h3 className="text-neutral-700 text-[18px] font-semibold leading-[24px]" style={{ fontFamily: 'Inter, sans-serif' }}>
@@ -45,7 +48,7 @@ export const SharedHabitsList = ({ habits }: SharedHabitsListProps) => {
                     className="w-4 h-4"
                   />
                   <span className="text-neutral-500 text-[13px] font-medium leading-[18px]" style={{ fontFamily: 'Inter, sans-serif' }}>
-                    {habit.streak} day streak
+                    {getCommitmentStreak(habit.id)} day streak
                   </span>
                 </div>
               </div>

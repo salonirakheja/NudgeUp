@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/Input';
 interface AddHabitModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (commitment: { name: string; icon: string; duration?: number }) => void;
+  onSave: (commitment: { name: string; icon: string; duration?: number; frequencyType?: 'daily' | 'weekly'; timesPerWeek?: number }) => void;
 }
 
 const habitIcons = [
@@ -22,6 +22,8 @@ export const AddHabitModal = ({ isOpen, onClose, onSave }: AddHabitModalProps) =
   const [duration, setDuration] = useState('');
   const [showCustomIconInput, setShowCustomIconInput] = useState(false);
   const [customIcon, setCustomIcon] = useState<string>('');
+  const [frequencyType, setFrequencyType] = useState<'daily' | 'weekly'>('daily');
+  const [timesPerWeek, setTimesPerWeek] = useState<string>('3');
 
   if (!isOpen) return null;
 
@@ -31,10 +33,21 @@ export const AddHabitModal = ({ isOpen, onClose, onSave }: AddHabitModalProps) =
       return;
     }
 
+    // Validate timesPerWeek if weekly
+    if (frequencyType === 'weekly') {
+      const times = parseInt(timesPerWeek);
+      if (isNaN(times) || times < 1 || times > 7) {
+        alert('Times per week must be between 1 and 7');
+        return;
+      }
+    }
+
     onSave({
       name: commitmentName,
       icon: selectedIcon,
       duration: duration ? parseInt(duration) : undefined,
+      frequencyType: frequencyType,
+      timesPerWeek: frequencyType === 'weekly' ? parseInt(timesPerWeek) : undefined,
     });
 
     // Reset form
@@ -43,6 +56,8 @@ export const AddHabitModal = ({ isOpen, onClose, onSave }: AddHabitModalProps) =
     setDuration('');
     setShowCustomIconInput(false);
     setCustomIcon('');
+    setFrequencyType('daily');
+    setTimesPerWeek('3');
     onClose();
   };
 
@@ -173,6 +188,68 @@ export const AddHabitModal = ({ isOpen, onClose, onSave }: AddHabitModalProps) =
             className="w-full h-14 px-5 py-4 bg-neutral-50 text-neutral-400 placeholder:text-neutral-400 outline outline-2 outline-offset-[-2px] outline-transparent"
           />
         </div>
+
+        {/* Frequency Type Selection */}
+        <div className="px-5 mt-12 flex-shrink-0">
+          <label className="block text-neutral-700 text-[14px] font-medium leading-[20px] mb-4" style={{ fontFamily: 'Inter, sans-serif' }}>
+            Frequency
+          </label>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => setFrequencyType('daily')}
+              className={`
+                flex-1 h-14 rounded-xl font-medium transition-all
+                ${frequencyType === 'daily'
+                  ? 'bg-primary-400 text-black'
+                  : 'bg-neutral-50 text-neutral-600 hover:bg-neutral-100'
+                }
+              `}
+              style={{ fontFamily: 'Inter, sans-serif' }}
+            >
+              Daily
+            </button>
+            <button
+              type="button"
+              onClick={() => setFrequencyType('weekly')}
+              className={`
+                flex-1 h-14 rounded-xl font-medium transition-all
+                ${frequencyType === 'weekly'
+                  ? 'bg-primary-400 text-black'
+                  : 'bg-neutral-50 text-neutral-600 hover:bg-neutral-100'
+                }
+              `}
+              style={{ fontFamily: 'Inter, sans-serif' }}
+            >
+              Weekly
+            </button>
+          </div>
+        </div>
+
+        {/* Times Per Week Input (only shown for weekly) */}
+        {frequencyType === 'weekly' && (
+          <div className="px-5 mt-6 flex-shrink-0">
+            <label className="block text-neutral-700 text-[14px] font-medium leading-[20px] mb-4" style={{ fontFamily: 'Inter, sans-serif' }}>
+              How many times per week?
+            </label>
+            <div className="relative">
+              <Input
+                type="number"
+                min="1"
+                max="7"
+                placeholder="e.g., 3"
+                value={timesPerWeek}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === '' || (parseInt(value) >= 1 && parseInt(value) <= 7)) {
+                    setTimesPerWeek(value);
+                  }
+                }}
+                className="w-full h-14 px-5 py-4 bg-neutral-50 text-neutral-400 placeholder:text-neutral-400 outline outline-2 outline-offset-[-2px] outline-transparent"
+              />
+            </div>
+          </div>
+        )}
 
         {/* Challenge Duration Input */}
         <div className="px-5 mt-12 flex-shrink-0">

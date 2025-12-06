@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { Commitment, CommitmentCompletion } from '@/types';
 
 interface CommitmentsContextType {
@@ -13,6 +13,8 @@ interface CommitmentsContextType {
   getCompletionForDate: (commitmentId: string, date: string) => boolean;
   getCompletionPercentageForDate: (date: string) => 'none' | '25%' | '50%' | '75%' | '100%';
   getCommitmentStreak: (commitmentId: string) => number;
+  getWeeklyCompletionCount: (commitmentId: string) => number;
+  getWeeklyStreak: (commitmentId: string) => number;
 }
 
 const CommitmentsContext = createContext<CommitmentsContextType | undefined>(undefined);
@@ -151,6 +153,9 @@ export function CommitmentsProvider({ children }: { children: ReactNode }) {
       createdAt: new Date().toISOString(),
       streak: 0,
       completed: false,
+      frequencyType: commitmentData.frequencyType || 'daily', // Default to 'daily' if not provided
+      timesPerWeek: commitmentData.timesPerWeek,
+      weeklyStreak: commitmentData.frequencyType === 'weekly' ? 0 : undefined,
     };
     setCommitments((prev) => [...prev, newCommitment]);
   };
@@ -209,14 +214,22 @@ export function CommitmentsProvider({ children }: { children: ReactNode }) {
       const isCompleted = existingCompletion ? !existingCompletion.completed : true;
       updateCommitment(commitmentId, { completed: isCompleted });
 
-      // Update streak
-      if (isCompleted) {
-        const streak = getCommitmentStreak(commitmentId);
-        updateCommitment(commitmentId, { streak });
+      // Update streak based on frequency type
+      const commitment = commitments.find(c => c.id === commitmentId);
+      if (commitment?.frequencyType === 'weekly') {
+        // Update weekly streak for weekly habits
+        const weeklyStreak = getWeeklyStreak(commitmentId);
+        updateCommitment(commitmentId, { weeklyStreak });
       } else {
-        // If unchecking today, recalculate streak
-        const streak = getCommitmentStreak(commitmentId);
-        updateCommitment(commitmentId, { streak });
+        // Update daily streak for daily habits
+        if (isCompleted) {
+          const streak = getCommitmentStreak(commitmentId);
+          updateCommitment(commitmentId, { streak });
+        } else {
+          // If unchecking today, recalculate streak
+          const streak = getCommitmentStreak(commitmentId);
+          updateCommitment(commitmentId, { streak });
+        }
       }
     }
   };
@@ -257,14 +270,24 @@ export function CommitmentsProvider({ children }: { children: ReactNode }) {
       return 'none';
     }
 
-    const completedCount = commitments.filter((commitment) => {
+    // Filter commitments to only include those created on or before the target date
+    const commitmentsForDate = commitments.filter((commitment) => {
+      const [createdYear, createdMonth, createdDay] = commitment.createdAt.split('T')[0].split('-').map(Number);
+      const createdDate = new Date(createdYear, createdMonth - 1, createdDay);
+      createdDate.setHours(0, 0, 0, 0);
+      return createdDate <= dateObj;
+    });
+
+    if (commitmentsForDate.length === 0) return 'none';
+
+    const completedCount = commitmentsForDate.filter((commitment) => {
       const completion = completions.find(
         (c) => c.commitmentId === commitment.id && c.date === date && c.completed
       );
       return completion?.completed || false;
     }).length;
 
-    const percentage = (completedCount / commitments.length) * 100;
+    const percentage = (completedCount / commitmentsForDate.length) * 100;
 
     if (percentage === 0) return 'none';
     if (percentage <= 25) return '25%';
@@ -273,14 +296,20 @@ export function CommitmentsProvider({ children }: { children: ReactNode }) {
     return '100%';
   };
 
-  const getCommitmentStreak = (commitmentId: string): number => {
+  const getCommitmentStreak = useCallback((commitmentId: string): number => {
     const today = new Date();
+    today.setHours(0, 0, 0, 0);
     let streak = 0;
     let currentDate = new Date(today);
 
     // Check backwards from today
     while (true) {
-      const dateStr = currentDate.toISOString().split('T')[0];
+      // Use consistent YYYY-MM-DD format (same as completions storage)
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth() + 1;
+      const day = currentDate.getDate();
+      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      
       const completion = completions.find(
         (c) => c.commitmentId === commitmentId && c.date === dateStr && c.completed
       );
@@ -288,11 +317,96 @@ export function CommitmentsProvider({ children }: { children: ReactNode }) {
       if (completion?.completed) {
         streak++;
         currentDate.setDate(currentDate.getDate() - 1);
+        currentDate.setHours(0, 0, 0, 0);
       } else {
         break;
       }
     }
 
+    return streak;
+  }, [completions]);
+
+  const getWeeklyCompletionCount = (commitmentId: string): number => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Get the day of week (0 = Sunday, 6 = Saturday)
+    const dayOfWeek = today.getDay();
+    
+    // Calculate Sunday of current week
+    const sunday = new Date(today);
+    sunday.setDate(today.getDate() - dayOfWeek);
+    
+    // Count completions from Sunday to today
+    let count = 0;
+    for (let i = 0; i <= dayOfWeek; i++) {
+      const date = new Date(sunday);
+      date.setDate(sunday.getDate() + i);
+      const year = date.getFullYear();
+      const month = date.getMonth() + 1;
+      const day = date.getDate();
+      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      
+      const completion = completions.find(
+        (c) => c.commitmentId === commitmentId && c.date === dateStr && c.completed
+      );
+      if (completion?.completed) {
+        count++;
+      }
+    }
+    
+    return count;
+  };
+
+  const getWeeklyStreak = (commitmentId: string): number => {
+    const commitment = commitments.find(c => c.id === commitmentId);
+    if (!commitment || commitment.frequencyType !== 'weekly' || !commitment.timesPerWeek) {
+      return 0;
+    }
+    
+    const timesPerWeek = commitment.timesPerWeek;
+    let streak = 0;
+    let currentWeekStart = new Date();
+    currentWeekStart.setHours(0, 0, 0, 0);
+    
+    // Get the day of week (0 = Sunday, 6 = Saturday)
+    const dayOfWeek = currentWeekStart.getDay();
+    
+    // Calculate Sunday of current week
+    let weekSunday = new Date(currentWeekStart);
+    weekSunday.setDate(currentWeekStart.getDate() - dayOfWeek);
+    
+    // Check backwards week by week
+    while (true) {
+      // Count completions for this week
+      let weekCount = 0;
+      for (let i = 0; i < 7; i++) {
+        const date = new Date(weekSunday);
+        date.setDate(weekSunday.getDate() + i);
+        const year = date.getFullYear();
+        const month = date.getMonth() + 1;
+        const day = date.getDate();
+        const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        
+        const completion = completions.find(
+          (c) => c.commitmentId === commitmentId && c.date === dateStr && c.completed
+        );
+        if (completion?.completed) {
+          weekCount++;
+        }
+      }
+      
+      // If this week met the goal, increment streak and check previous week
+      if (weekCount >= timesPerWeek) {
+        streak++;
+        // Move to previous week (create new date to avoid mutation)
+        weekSunday = new Date(weekSunday);
+        weekSunday.setDate(weekSunday.getDate() - 7);
+      } else {
+        break;
+      }
+    }
+    
     return streak;
   };
 
@@ -308,6 +422,8 @@ export function CommitmentsProvider({ children }: { children: ReactNode }) {
         getCompletionForDate,
         getCompletionPercentageForDate,
         getCommitmentStreak,
+        getWeeklyCompletionCount,
+        getWeeklyStreak,
       }}
     >
       {children}
