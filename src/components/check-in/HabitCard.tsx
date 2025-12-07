@@ -19,7 +19,7 @@ function HabitCard({ habit }: HabitCardProps) {
   const { groups } = useGroups();
   
   // Swipe-to-delete state
-  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null);
   const [swipeOffset, setSwipeOffset] = useState(0);
   const DELETE_BUTTON_WIDTH = 80;
   const SWIPE_THRESHOLD = 50;
