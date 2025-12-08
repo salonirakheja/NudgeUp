@@ -13,6 +13,7 @@ interface Group {
   yourProgress: number;
   groupAverage: number;
   isAhead: boolean;
+  totalDays?: number;
   inviteCode?: string;
 }
 
