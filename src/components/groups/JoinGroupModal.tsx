@@ -59,7 +59,7 @@ export const JoinGroupModal = ({ isOpen, onClose, onJoin }: JoinGroupModalProps)
       if (!group) {
         try {
           console.log('Group not found in localStorage, searching InstantDB...');
-          const dbGroups = await queryOnce({ groups: {} });
+          const dbGroups = await queryOnce({ groups: {} }) as any;
           if (dbGroups?.groups && Array.isArray(dbGroups.groups)) {
             group = dbGroups.groups.find((g: any) => g.inviteCode === inviteCode);
             console.log('Found group in InstantDB:', group ? group.name : 'not found');
