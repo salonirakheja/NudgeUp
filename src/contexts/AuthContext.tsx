@@ -92,7 +92,7 @@ function AuthProvider({ children }: { children: ReactNode }) {
       
       // If not found in cache, try a fresh query
       console.log('Making fresh query to check if user exists...');
-      const freshUsersData = await queryOnce({ users: {} });
+      const freshUsersData = await queryOnce({ users: {} }) as any;
       
       console.log('Fresh query result:', {
         usersCount: freshUsersData?.users?.length || 0,
@@ -185,15 +185,16 @@ function AuthProvider({ children }: { children: ReactNode }) {
 
       console.log('Hashing provided password...');
       const hashedPassword = await hashPassword(password);
+      const userPassword = (user.password as unknown as string) || '';
       console.log('Password hash comparison:', {
-        storedHash: user.password?.substring(0, 20) + '...',
+        storedHash: userPassword?.substring(0, 20) + '...',
         computedHash: hashedPassword?.substring(0, 20) + '...',
-        match: user.password === hashedPassword,
+        match: userPassword === hashedPassword,
       });
 
-      if (user.password !== hashedPassword) {
+      if (userPassword !== hashedPassword) {
         console.error('Password mismatch:', {
-          storedLength: user.password?.length,
+          storedLength: userPassword?.length,
           computedLength: hashedPassword?.length,
         });
         throw new Error('Incorrect password. Please try again.');
@@ -431,6 +432,9 @@ function AuthProvider({ children }: { children: ReactNode }) {
       
       // Use the authenticated user's ID for the transaction
       // This MUST be instantUser.id to have proper write permissions
+      if (!instantUser || !instantUser.id) {
+        throw new Error('Authentication failed. Please go back and verify your email code again.');
+      }
       const transactionUserId = instantUser.id;
       
       console.log('Creating user account:', { userId: transactionUserId, email, name });
