@@ -296,46 +296,45 @@ export const CalendarGrid = () => {
         </div>
       ) : (
         <div className="grid grid-cols-7 gap-1">
-          {weekDaysData?.map((day, index) => {
-            if (!day) return null;
+          {(weekDaysData ?? [])
+            .filter((d): d is DayData => d !== null)
+            .map((day, index) => {
+              const bgColor = getCompletionColor(day.completion);
+              const textColor = getTextColor(day.completion);
+              const isToday = day.isToday;
+              const date = new Date(weekStart);
+              date.setDate(weekStart.getDate() + index);
 
-            const bgColor = getCompletionColor(day.completion);
-            const textColor = getTextColor(day.completion);
-            const isToday = day.isToday;
-            const date = new Date(weekStart);
-            date.setDate(weekStart.getDate() + index);
+              const getIndicatorColor = () => {
+                if (day.completion === '100%') return 'bg-primary-500';
+                if (day.completion === 'none') return '';
+                return 'bg-yellow-400';
+              };
 
-            // Determine indicator color
-            const getIndicatorColor = () => {
-              if (day.completion === '100%') return 'bg-primary-500';
-              if (day.completion === 'none') return '';
-              return 'bg-yellow-400'; // For partial (25%, 50%, 75%)
-            };
+              const dayOfWeek = date.getDay();
 
-            const dayOfWeek = date.getDay();
-            return (
-              <button
-                key={index}
-                onClick={() => handleDateClick(date.getDate(), date)}
-                className={`
-                  w-full aspect-square rounded-xl flex flex-col justify-center items-center relative
-                  ${bgColor}
-                  ${day.completion === 'none' ? 'border-2 border-neutral-200' : ''}
-                  ${isToday ? 'ring-4 ring-[#FFE5E5] ring-offset-0' : ''}
-                  hover:opacity-80 transition-opacity cursor-pointer
-                `}
-                style={{ borderRadius: '12px' }}
-              >
-                <span className={`${textColor} text-base font-normal leading-6`} style={{ fontFamily: 'Inter, sans-serif' }}>
-                  {day.date}
-                </span>
-                {/* Mini indicator */}
-                {getIndicatorColor() && (
-                  <div className={`absolute bottom-1.5 w-1 h-1 rounded-full ${getIndicatorColor()}`}></div>
-                )}
-              </button>
-            );
-          })}
+              return (
+                <button
+                  key={index}
+                  onClick={() => handleDateClick(date.getDate(), date)}
+                  className={`
+                    w-full aspect-square rounded-xl flex flex-col justify-center items-center relative
+                    ${bgColor}
+                    ${day.completion === 'none' ? 'border-2 border-neutral-200' : ''}
+                    ${isToday ? 'ring-4 ring-[#FFE5E5] ring-offset-0' : ''}
+                    hover:opacity-80 transition-opacity cursor-pointer
+                  `}
+                  style={{ borderRadius: '12px' }}
+                >
+                  <span className={`${textColor} text-base font-normal leading-6`} style={{ fontFamily: 'Inter, sans-serif' }}>
+                    {day.date}
+                  </span>
+                  {getIndicatorColor() && (
+                    <div className={`absolute bottom-1.5 w-1 h-1 rounded-full ${getIndicatorColor()}`}></div>
+                  )}
+                </button>
+              );
+            })}
         </div>
       )}
 
