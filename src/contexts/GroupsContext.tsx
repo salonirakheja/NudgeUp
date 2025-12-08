@@ -433,7 +433,7 @@ export function GroupsProvider({ children }: { children: ReactNode }) {
                       ...member,
                       id: memberId,
                       name: member.name, // Use the better name
-                      avatar: member.avatar || existingMember.avatar || '😊',
+                      avatar: member.avatar ?? existingMember?.avatar ?? '😊',
                     });
                   } else if (!existingIsFallback && newIsFallback) {
                     // Keep the existing one if it's better
@@ -444,7 +444,7 @@ export function GroupsProvider({ children }: { children: ReactNode }) {
                       ...member,
                       id: memberId,
                       name: member.name,
-                      avatar: member.avatar || existingMember.avatar || '😊',
+                      avatar: member.avatar ?? existingMember?.avatar ?? '😊',
                     });
                   }
                 }
