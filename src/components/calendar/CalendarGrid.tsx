@@ -297,9 +297,7 @@ export const CalendarGrid = () => {
       ) : (
         <div className="grid grid-cols-7 gap-1">
           {weekDaysData?.map((day, index) => {
-            if (day === null) {
-              return <div key={`empty-${index}`} className="h-11" />;
-            }
+            if (!day) return null;
 
             const bgColor = getCompletionColor(day.completion);
             const textColor = getTextColor(day.completion);
