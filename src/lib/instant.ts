@@ -97,7 +97,7 @@ export function useAuth() {
 }
 
 export const tx = db?.tx || ({} as any);
-export const id = db?.id || (() => '');
+export const id = () => crypto.randomUUID();
 export const queryOnce = db?.queryOnce || (async () => null);
 
 // Note: auth.signInWithToken maps to signInWithCustomToken internally
