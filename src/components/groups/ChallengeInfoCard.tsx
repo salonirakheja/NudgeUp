@@ -6,6 +6,7 @@ import { useGroups } from '@/contexts/GroupsContext';
 
 interface Group {
   id: string;
+  name?: string;
   challengeDuration?: string;
   yourProgress: number;
   totalDays?: number;
@@ -151,7 +152,7 @@ export const ChallengeInfoCard = ({ group, members = [] }: ChallengeInfoCardProp
   const handleShareInvite = () => {
     if (navigator.share) {
       navigator.share({
-        title: `Join ${group.name || 'this group'}`,
+        title: `Join ${currentGroup.name || 'this group'}`,
         text: `Join me in this challenge! Use code: ${inviteCode}`,
         url: inviteLink,
       });
