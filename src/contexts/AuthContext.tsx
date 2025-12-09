@@ -68,72 +68,35 @@ function AuthProvider({ children }: { children: ReactNode }) {
 
   const checkUserExists = async (email: string): Promise<boolean> => {
     const normalizedEmail = email.toLowerCase().trim();
-    console.log('Checking if user exists:', normalizedEmail);
-    
+    console.log('Checking if user exists (strict):', normalizedEmail);
+
     try {
-      // First try the cached useQuery data (might work if partially authenticated)
+      // 1) Try cached query from useQuery
       if (usersData?.users && usersData.users.length > 0) {
-        const exists = usersData.users.some((u: any) => {
-          const userEmail = u.email?.toLowerCase()?.trim();
-          return userEmail === normalizedEmail;
-        });
-        
-        if (exists) {
-          const user = usersData.users.find((u: any) => u.email?.toLowerCase()?.trim() === normalizedEmail);
-          console.log('Found user in cached query:', {
-            id: user?.id,
-            email: user?.email,
-            hasPassword: !!user?.password,
-            name: user?.name,
-      });
-          return true;
-        }
+        const existsInCache = usersData.users.some((u: any) =>
+          u.email?.toLowerCase()?.trim() === normalizedEmail
+        );
+        console.log('checkUserExists cache result:', existsInCache);
+        if (existsInCache) return true;
       }
-      
-      // If not found in cache, try a fresh query
-      console.log('Making fresh query to check if user exists...');
-      const freshUsersData = await queryOnce({ users: {} }) as any;
-      
-      console.log('Fresh query result:', {
-        usersCount: freshUsersData?.users?.length || 0,
-        userEmails: freshUsersData?.users?.map((u: any) => u.email) || [],
-      });
-      
-      if (freshUsersData?.users && freshUsersData.users.length > 0) {
-        const exists = freshUsersData.users.some((u: any) => {
-      const userEmail = u.email?.toLowerCase()?.trim();
-      return userEmail === normalizedEmail;
-    });
-    
-    console.log('User exists check result:', exists);
-    if (exists) {
-          const user = freshUsersData.users.find((u: any) => u.email?.toLowerCase()?.trim() === normalizedEmail);
-      console.log('Found user:', {
-        id: user?.id,
-        email: user?.email,
-        hasPassword: !!user?.password,
-        name: user?.name,
-      });
-    } else {
-      console.log('User not found in query results');
-          console.log('Available user emails:', freshUsersData.users.map((u: any) => u.email));
-    }
-    
-    return exists;
-      }
-      
-      // If both queries return no results, it might be due to permissions
-      // Be lenient - return true to allow sign-in attempt
-      // The signIn function will verify if user actually exists
-      console.log('No users found in queries - this might be due to read permissions');
-      console.log('Returning true to allow sign-in attempt - signIn will verify user exists');
-      return true; // Be lenient - allow sign-in attempt
-    } catch (error: any) {
-      console.error('Error checking if user exists:', error);
-      // Be lenient - return true to allow sign-in attempt
-      // The signIn function will verify if user actually exists
-      console.warn('⚠️ Error checking user existence. Returning true to allow sign-in attempt.');
-      return true; // Be lenient - allow sign-in attempt
+
+      // 2) Fresh query via queryOnce
+      console.log('checkUserExists: making fresh queryOnce({ users: {} })');
+      const freshUsersData = (await queryOnce({ users: {} })) as any;
+
+      const users = freshUsersData?.users || [];
+      console.log('checkUserExists fresh users count:', users.length);
+
+      const existsInFresh = users.some((u: any) =>
+        u.email?.toLowerCase()?.trim() === normalizedEmail
+      );
+      console.log('checkUserExists fresh result:', existsInFresh);
+
+      return existsInFresh;
+    } catch (error) {
+      console.error('Error in checkUserExists:', error);
+      // On error, be strict: we DO NOT assume the user exists.
+      return false;
     }
   };
 
@@ -141,10 +104,10 @@ function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const normalizedEmail = email.toLowerCase().trim();
       console.log('Sign in attempt for:', normalizedEmail);
-      
+
       const userExists = await checkUserExists(normalizedEmail);
-      console.log('User exists check result:', userExists);
-      
+      console.log('User exists (strict check):', userExists);
+
       if (!userExists) {
         throw new Error('No account found with this email. Please create an account first.');
       }
@@ -156,29 +119,18 @@ function AuthProvider({ children }: { children: ReactNode }) {
         attempts++;
       }
 
-      const user = usersData?.users?.find((u: any) => u.email?.toLowerCase() === normalizedEmail);
+      const user = usersData?.users?.find(
+        (u: any) => u.email?.toLowerCase()?.trim() === normalizedEmail
+      );
       console.log('Found user in database:', !!user);
       console.log('User has password:', !!user?.password);
-      
-      // If query returned no users, it might be due to read permissions
-      // In this case, we can't verify the password, so we'll proceed with magic code authentication
-      // InstantDB will verify if the user exists when they verify the code
+
       if (!user) {
-        if (!usersData?.users || usersData.users.length === 0) {
-          console.warn('⚠️ Users query returned no results in signIn function');
-          console.warn('This might be due to read permissions blocking the query');
-          console.warn('→ Proceeding with magic code authentication - InstantDB will verify if user exists');
-          // Skip password check and go straight to magic code
-          // InstantDB's magic code will verify if the user exists
-          await auth.sendMagicCode({ email: normalizedEmail });
-          console.log('Magic code sent - user will verify via email');
-          return; // Exit early - password verification skipped due to query limitations
-        } else {
-          // Query returned users but this email wasn't found
-          throw new Error('Account not found. Please check your email and try again.');
-        }
+        // At this point we KNOW the user should exist from checkUserExists,
+        // so if we still can't see them, treat it as an error and do not silently fall back.
+        throw new Error('Could not load your account details. Please try again in a moment or use magic code login.');
       }
-      
+
       if (!user.password) {
         throw new Error('Account not set up properly. Please create a new account.');
       }
