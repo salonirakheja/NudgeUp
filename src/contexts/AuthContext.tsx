@@ -391,7 +391,44 @@ function AuthProvider({ children }: { children: ReactNode }) {
       console.log('Giving InstantDB WebSocket a moment to fully sync permissions...');
       console.log('Using user ID for transaction:', transactionUserId);
       console.log('Auth state confirmed - instantUser available:', !!instantUser);
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for permissions to sync
+      
+      // Try to verify auth.id is set by checking the auth object directly
+      // This is critical - auth.id must match transactionUserId for permissions
+      let authIdVerified = false;
+      let authCheckAttempts = 0;
+      const maxAuthChecks = 20;
+      
+      while (!authIdVerified && authCheckAttempts < maxAuthChecks) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        authCheckAttempts++;
+        
+        // Check if instantUser.id matches transactionUserId (this means auth.id should be set)
+        if (instantUser && instantUser.id === transactionUserId) {
+          authIdVerified = true;
+          console.log('✓ Auth ID verified - instantUser.id matches transactionUserId');
+          break;
+        }
+        
+        if (authCheckAttempts % 5 === 0) {
+          console.log(`Waiting for auth.id to sync... attempt ${authCheckAttempts}/${maxAuthChecks}`);
+          console.log('Current state:', {
+            instantUser: instantUser ? { id: instantUser.id } : 'null',
+            transactionUserId,
+            match: instantUser?.id === transactionUserId,
+          });
+        }
+      }
+      
+      if (!authIdVerified) {
+        console.error('❌ Auth ID not verified after waiting');
+        console.error('This means auth.id may not be set, which will cause permission errors');
+        console.error('instantUser:', instantUser ? { id: instantUser.id } : 'null');
+        console.error('transactionUserId:', transactionUserId);
+        throw new Error('Authentication state not ready. Please wait a moment and try again.');
+      }
+      
+      // Additional wait to ensure permissions are fully established
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
       console.log('Creating user record with ID:', transactionUserId);
       console.log('Transaction payload:', {
@@ -430,14 +467,36 @@ function AuthProvider({ children }: { children: ReactNode }) {
           password: '[REDACTED - length: ' + hashedPassword.length + ']',
         });
         
+        // Verify tx object is available
+        if (!tx || !tx.users) {
+          console.error('❌ Transaction object not available');
+          throw new Error('Database transaction service not available. Please refresh the page.');
+        }
+        
+        // Verify the transaction target exists
+        if (!tx.users[transactionUserId]) {
+          console.error('❌ Transaction target not available for user ID:', transactionUserId);
+          throw new Error('Cannot create transaction for this user ID. Please try again.');
+        }
+        
+        console.log('Transaction object verified, creating transaction...');
+        console.log('Final verification - auth state:', {
+          instantUser: instantUser ? { id: instantUser.id, email: instantUser.email } : 'null',
+          transactionUserId,
+          idsMatch: instantUser?.id === transactionUserId,
+        });
+        
         // Create the transaction - update() works for both new and existing records
-        tx.users[transactionUserId].update(userData);
+        // CRITICAL: The user ID in the transaction MUST match auth.id for permissions
+        const transactionResult = tx.users[transactionUserId].update(userData);
         console.log('✓ Transaction created using update()');
+        console.log('Transaction result:', transactionResult);
         
         console.log('✓ Transaction created and queued for sending');
         console.log('Transaction details logged. Waiting for sync...');
         console.log('NOTE: If this fails, check InstantDB dashboard rules to ensure authenticated users can write to users table');
         console.log('NOTE: Verify that auth.id matches transactionUserId:', transactionUserId);
+        console.log('NOTE: Current instantUser.id:', instantUser?.id);
       } catch (txError: any) {
         console.error('❌ Error creating transaction:', txError);
         console.error('Transaction error details:', {
