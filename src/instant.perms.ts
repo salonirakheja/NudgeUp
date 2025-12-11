@@ -1,8 +1,6 @@
 // Docs: https://www.instantdb.com/docs/permissions
 
-import type { InstantRules } from "@instantdb/react";
-
-const rules: InstantRules = {
+const rules = {
   users: {
     read: "true",
     write: "users.id === auth.id",
@@ -25,4 +23,4 @@ const rules: InstantRules = {
   },
 };
 
-export default rules;
+export default rules as any;
