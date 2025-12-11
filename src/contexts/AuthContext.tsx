@@ -334,7 +334,7 @@ function AuthProvider({ children }: { children: ReactNode }) {
       // Wait a bit for auth state to potentially sync
       // But don't wait too long - we'll proceed with verifiedUserId if needed
       let attempts = 0;
-      const maxAttempts = 20; // Reduced - we'll proceed anyway
+      const maxAttempts = 30; // Increased to give more time for auth state to sync
       
       console.log('Checking InstantDB authentication state...');
       while (!instantUser && attempts < maxAttempts) {
@@ -383,11 +383,12 @@ function AuthProvider({ children }: { children: ReactNode }) {
       const normalizedEmail = email.toLowerCase().trim();
       
       // Use the authenticated user's ID for the transaction
-      // This MUST be instantUser.id to have proper write permissions
-      if (!instantUser || !instantUser.id) {
+      // This can be either instantUser.id (if synced) or verifiedUserId (from successful code verification)
+      // Since code verification succeeded, the user IS authenticated with InstantDB, so verifiedUserId is valid
+      if (!userId) {
         throw new Error('Authentication failed. Please go back and verify your email code again.');
       }
-      const transactionUserId = instantUser.id;
+      const transactionUserId = userId;
       
       console.log('Creating user account:', { userId: transactionUserId, email, name });
       console.log('Password hash (first 20 chars):', hashedPassword.substring(0, 20) + '...');
@@ -401,8 +402,11 @@ function AuthProvider({ children }: { children: ReactNode }) {
 
       // CRITICAL: Give InstantDB WebSocket a moment to fully sync permissions after authentication
       // This ensures the authenticated user has write permissions before we attempt the transaction
+      // If we're using verifiedUserId (not instantUser), we still need to wait for auth.id to be set
       console.log('Giving InstantDB WebSocket a moment to fully sync permissions...');
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      console.log('Using user ID for transaction:', transactionUserId);
+      console.log('Auth state:', { instantUser: !!instantUser, verifiedUserId: !!verifiedUserId });
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Increased wait time
       
       console.log('Creating user record with ID:', transactionUserId);
       console.log('Transaction payload:', {
@@ -514,12 +518,9 @@ function AuthProvider({ children }: { children: ReactNode }) {
         console.error('❌ 3. Database sync delay (transaction may still be processing)');
         console.error('❌ 4. InstantDB authentication not fully established');
         
-        // Don't throw error - user is authenticated and can use the app
-        // The transaction might still sync in the background
-        // But log a warning that they should check InstantDB rules
-        console.warn('⚠️ Account creation completed but user record not persisted.');
-        console.warn('⚠️ User can still use the app, but data may not be saved.');
-        console.warn('⚠️ Please check InstantDB dashboard rules for users table.');
+        // Throw an error so the user knows account creation failed
+        // This is better than silently failing
+        throw new Error('Account creation failed. The user record was not saved to the database. Please try again or contact support if the issue persists.');
       } else {
         console.log('✓ Account creation completed successfully - user is in database');
       }
