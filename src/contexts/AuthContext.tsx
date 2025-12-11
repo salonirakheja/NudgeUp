@@ -437,12 +437,48 @@ function AuthProvider({ children }: { children: ReactNode }) {
       await new Promise(resolve => setTimeout(resolve, 2000)); // Increased wait time
       
       // CRITICAL: Verify that auth.id is actually set in InstantDB's permission system
-      // We can test this by trying to query a user record with the same ID
-      // If permissions work, we should be able to read our own record (even if it doesn't exist yet)
+      // Try to access auth.id directly from InstantDB's auth object
       console.log('Verifying auth.id is set in InstantDB permission system...');
+      console.log('Checking auth object:', {
+        authAvailable: !!auth,
+        authType: typeof auth,
+        authKeys: auth ? Object.keys(auth) : [],
+      });
+      
+      // Try to get auth.id directly if available
+      let actualAuthId: string | null = null;
       try {
-        // Try to query for a user with our ID - this will test if auth.id is set
-        // Even if the user doesn't exist, the permission check should work
+        if (auth && typeof (auth as any).id !== 'undefined') {
+          actualAuthId = (auth as any).id;
+          console.log('✓ Found auth.id directly:', actualAuthId);
+        } else if (auth && typeof (auth as any).userId !== 'undefined') {
+          actualAuthId = (auth as any).userId;
+          console.log('✓ Found auth.userId:', actualAuthId);
+        } else if (instantUser?.id) {
+          actualAuthId = instantUser.id;
+          console.log('✓ Using instantUser.id as auth.id:', actualAuthId);
+        }
+        
+        console.log('Auth ID comparison:', {
+          actualAuthId,
+          transactionUserId,
+          match: actualAuthId === transactionUserId,
+        });
+        
+        if (actualAuthId !== transactionUserId) {
+          console.error('❌ CRITICAL: auth.id does not match transactionUserId!');
+          console.error('This will cause permission failure: users.id === auth.id will be false');
+          console.error('auth.id:', actualAuthId);
+          console.error('transactionUserId:', transactionUserId);
+          throw new Error(`Auth ID mismatch: auth.id is ${actualAuthId} but trying to create user with ID ${transactionUserId}. Permission check will fail.`);
+        }
+      } catch (authCheckError: any) {
+        console.error('❌ Error checking auth.id:', authCheckError);
+        throw authCheckError;
+      }
+      
+      // Test permission by trying to query
+      try {
         const permissionTest = await queryOnce({
           users: {
             $: {
@@ -454,8 +490,8 @@ function AuthProvider({ children }: { children: ReactNode }) {
         console.log('✓ Permission test query succeeded - auth.id should be set');
         console.log('Permission test result:', permissionTest);
       } catch (permError: any) {
-        console.warn('⚠ Permission test query had issues (this might be normal):', permError);
-        // Don't throw - this is just a test, the actual transaction might still work
+        console.warn('⚠ Permission test query had issues:', permError);
+        // Don't throw - this is just a test
       }
       
       console.log('Creating user record with ID:', transactionUserId);
