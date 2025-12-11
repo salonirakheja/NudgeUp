@@ -2,7 +2,7 @@
 
 import type { InstantRules } from "@instantdb/react";
 
-const rules = {
+const rules: InstantRules = {
   users: {
     read: "true",
     write: "users.id === auth.id",
@@ -23,6 +23,6 @@ const rules = {
     read: "groupMembers.userId === auth.id || (exists(groups) && groups.id === groupMembers.groupId && exists(groupMembers) && groupMembers.groupId === groups.id && groupMembers.userId === auth.id)",
     write: "groupMembers.userId === auth.id",
   },
-} satisfies InstantRules;
+};
 
 export default rules;
