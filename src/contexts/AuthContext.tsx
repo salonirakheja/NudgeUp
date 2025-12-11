@@ -403,27 +403,41 @@ function AuthProvider({ children }: { children: ReactNode }) {
       });
       
       try {
-        // Create/update the user record
+        // Create the user record
         // InstantDB transactions are automatically sent
         console.log('Transaction will create user with:', {
           id: transactionUserId,
           email: normalizedEmail,
           name: name || email.split('@')[0],
         });
+        console.log('Current auth state at transaction time:', {
+          instantUser: instantUser ? { id: instantUser.id, email: instantUser.email } : 'null',
+          transactionUserId,
+        });
         
         // Use update() which works for both create and update in InstantDB
-        // The ID must match the authenticated user's ID for permissions
-        tx.users[transactionUserId].update({
+        // The ID must match the authenticated user's ID for permissions (users.id === auth.id)
+        const userData = {
           id: transactionUserId,
           email: normalizedEmail,
           name: name || email.split('@')[0],
           password: hashedPassword,
           createdAt: Date.now(),
+        };
+        
+        console.log('Creating transaction with data:', {
+          ...userData,
+          password: '[REDACTED - length: ' + hashedPassword.length + ']',
         });
+        
+        // Create the transaction - update() works for both new and existing records
+        tx.users[transactionUserId].update(userData);
+        console.log('✓ Transaction created using update()');
         
         console.log('✓ Transaction created and queued for sending');
         console.log('Transaction details logged. Waiting for sync...');
         console.log('NOTE: If this fails, check InstantDB dashboard rules to ensure authenticated users can write to users table');
+        console.log('NOTE: Verify that auth.id matches transactionUserId:', transactionUserId);
       } catch (txError: any) {
         console.error('❌ Error creating transaction:', txError);
         console.error('Transaction error details:', {
@@ -456,11 +470,35 @@ function AuthProvider({ children }: { children: ReactNode }) {
       console.log('Verifying user was saved to database...');
       let verifyAttempts = 0;
       let userSaved = false;
-      const maxVerifyAttempts = 30; // Increased from 20
+      const maxVerifyAttempts = 40; // Increased to give more time
       
       while (!userSaved && verifyAttempts < maxVerifyAttempts) {
         await new Promise(resolve => setTimeout(resolve, 500));
         verifyAttempts++;
+        
+        // Try to refresh the query by making a fresh queryOnce call
+        if (verifyAttempts % 5 === 0) {
+          try {
+            console.log(`Refreshing query (attempt ${verifyAttempts})...`);
+            const freshData = await queryOnce({ users: {} }) as any;
+            const freshUsers = freshData?.users || [];
+            console.log(`Fresh query returned ${freshUsers.length} users`);
+            
+            // Check in fresh data
+            const savedUser = freshUsers.find((u: any) => 
+              u.id === transactionUserId ||
+              u.email?.toLowerCase()?.trim() === normalizedEmail
+            );
+            
+            if (savedUser && savedUser.password) {
+              userSaved = true;
+              console.log('✓ User verified in fresh query with password');
+              break;
+            }
+          } catch (queryError) {
+            console.warn('Error refreshing query:', queryError);
+          }
+        }
         
         // Check if user exists in the database now
         // Try multiple ID variations in case there's a mismatch
@@ -468,8 +506,6 @@ function AuthProvider({ children }: { children: ReactNode }) {
         const savedUser = usersData?.users?.find((u: any) => 
           u.id === transactionUserId ||
           u.id === currentInstantUserId ||
-          u.id === userId || 
-          u.id === verifiedUserId ||
           u.email?.toLowerCase()?.trim() === normalizedEmail
         );
         
@@ -484,6 +520,8 @@ function AuthProvider({ children }: { children: ReactNode }) {
         } else if (!savedUser && verifyAttempts % 5 === 0) {
           console.log(`Verifying user save... attempt ${verifyAttempts}/${maxVerifyAttempts}`);
           console.log('Current users in database:', usersData?.users?.length || 0);
+          console.log('Looking for user with ID:', transactionUserId);
+          console.log('Looking for user with email:', normalizedEmail);
         }
       }
       
