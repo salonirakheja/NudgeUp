@@ -488,15 +488,53 @@ function AuthProvider({ children }: { children: ReactNode }) {
         
         // Create the transaction - update() works for both new and existing records
         // CRITICAL: The user ID in the transaction MUST match auth.id for permissions
-        const transactionResult = tx.users[transactionUserId].update(userData);
-        console.log('✓ Transaction created using update()');
-        console.log('Transaction result:', transactionResult);
+        // For new records, InstantDB should allow creation when users.id === auth.id
+        console.log('Attempting to create transaction...');
+        console.log('Permission check: users.id === auth.id should be true');
+        console.log('users.id (from transaction):', transactionUserId);
+        console.log('auth.id (from instantUser):', instantUser?.id);
+        
+        // Try to create the transaction
+        // Note: InstantDB transactions are automatically sent when created
+        try {
+          tx.users[transactionUserId].update(userData);
+          console.log('✓ Transaction created using update()');
+          
+          // Force a small delay to ensure transaction is queued
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+          // Try to verify transaction was queued by checking if we can still access it
+          // This doesn't guarantee it was sent, but helps with debugging
+          console.log('Transaction queued, checking if still accessible...');
+        } catch (updateError: any) {
+          console.error('❌ Error in update() call:', updateError);
+          throw updateError;
+        }
         
         console.log('✓ Transaction created and queued for sending');
         console.log('Transaction details logged. Waiting for sync...');
         console.log('NOTE: If this fails, check InstantDB dashboard rules to ensure authenticated users can write to users table');
         console.log('NOTE: Verify that auth.id matches transactionUserId:', transactionUserId);
         console.log('NOTE: Current instantUser.id:', instantUser?.id);
+        
+        // Immediately try to query the user to see if transaction was processed
+        // This is a quick check - if it fails, the transaction likely wasn't sent
+        console.log('Performing immediate query to check if transaction was processed...');
+        try {
+          const immediateCheck = await queryOnce({ 
+            users: { 
+              $: { where: { id: transactionUserId } } 
+            } 
+          }) as any;
+          const foundUser = immediateCheck?.users?.[0];
+          if (foundUser) {
+            console.log('✓ User found immediately after transaction! Transaction was successful.');
+          } else {
+            console.log('⚠ User not found immediately - transaction may still be processing or failed');
+          }
+        } catch (queryError) {
+          console.warn('Could not perform immediate query check:', queryError);
+        }
       } catch (txError: any) {
         console.error('❌ Error creating transaction:', txError);
         console.error('Transaction error details:', {

@@ -3,6 +3,10 @@
 const rules = {
   users: {
     read: "true",
+    // Allow write (create/update) when the user ID matches auth.id
+    // This works for both creating new records and updating existing ones
+    // When creating: if the record ID matches auth.id, permission is granted
+    // When updating: if the existing record's ID matches auth.id, permission is granted
     write: "users.id === auth.id",
   },
   groups: {
