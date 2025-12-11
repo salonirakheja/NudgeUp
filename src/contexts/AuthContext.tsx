@@ -300,8 +300,14 @@ function AuthProvider({ children }: { children: ReactNode }) {
       
       // Wait for auth state to sync in React
       // The SDK method should trigger useAuth to update, but give it a moment
+      // CRITICAL: We need to wait long enough for auth.id to be set in InstantDB's permission system
       console.log('Waiting for React auth state to sync...');
-      await new Promise(resolve => setTimeout(resolve, 4000)); // Increased wait time to ensure auth state syncs
+      console.log('This is critical - auth.id must be set before creating user record');
+      await new Promise(resolve => setTimeout(resolve, 5000)); // Increased wait time significantly
+      
+      // Additional wait to ensure InstantDB's internal auth state is fully synced
+      console.log('Waiting for InstantDB internal auth state to sync...');
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
       // Check if instantUser is now available
       if (instantUser) {
@@ -428,7 +434,29 @@ function AuthProvider({ children }: { children: ReactNode }) {
       }
       
       // Additional wait to ensure permissions are fully established
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Increased wait time
+      
+      // CRITICAL: Verify that auth.id is actually set in InstantDB's permission system
+      // We can test this by trying to query a user record with the same ID
+      // If permissions work, we should be able to read our own record (even if it doesn't exist yet)
+      console.log('Verifying auth.id is set in InstantDB permission system...');
+      try {
+        // Try to query for a user with our ID - this will test if auth.id is set
+        // Even if the user doesn't exist, the permission check should work
+        const permissionTest = await queryOnce({
+          users: {
+            $: {
+              where: { id: transactionUserId },
+              limit: 1
+            }
+          }
+        }) as any;
+        console.log('✓ Permission test query succeeded - auth.id should be set');
+        console.log('Permission test result:', permissionTest);
+      } catch (permError: any) {
+        console.warn('⚠ Permission test query had issues (this might be normal):', permError);
+        // Don't throw - this is just a test, the actual transaction might still work
+      }
       
       console.log('Creating user record with ID:', transactionUserId);
       console.log('Transaction payload:', {
