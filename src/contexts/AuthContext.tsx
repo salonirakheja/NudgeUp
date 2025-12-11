@@ -530,26 +530,32 @@ function AuthProvider({ children }: { children: ReactNode }) {
         console.log('auth.id (from instantUser):', instantUser?.id);
         
         // Try to create the transaction
-        // Note: InstantDB transactions are automatically sent when created
-        // But we'll verify it was created successfully
+        // CRITICAL: Use db.transact() explicitly like in the Sandbox
+        // This ensures the transaction is properly sent to InstantDB
         try {
-          // Create the transaction
-          const transaction = tx.users[transactionUserId].update(userData);
-          console.log('✓ Transaction object created');
-          console.log('Transaction type:', typeof transaction);
-          console.log('Transaction value:', transaction);
+          console.log('Creating transaction using db.transact()...');
           
-          // Check if db has a transact method that we should use
+          // Check if db.transact is available
           if (db && typeof (db as any).transact === 'function') {
-            console.log('db.transact() method available - but tx.update() should work automatically');
+            console.log('Using db.transact() method (same as Sandbox)');
+            // Use db.transact() to wrap the transaction - this is how it works in Sandbox
+            (db as any).transact(
+              tx.users[transactionUserId].update(userData)
+            );
+            console.log('✓ Transaction created and sent via db.transact()');
+          } else {
+            console.log('db.transact() not available, using tx.update() directly');
+            // Fallback to direct update (should still work)
+            tx.users[transactionUserId].update(userData);
+            console.log('✓ Transaction created using tx.update()');
           }
           
           // Force a small delay to ensure transaction is queued
-          await new Promise(resolve => setTimeout(resolve, 200));
+          await new Promise(resolve => setTimeout(resolve, 300));
           
-          console.log('Transaction should be queued and sent automatically by InstantDB');
+          console.log('Transaction should be queued and sent to InstantDB');
         } catch (updateError: any) {
-          console.error('❌ Error in update() call:', updateError);
+          console.error('❌ Error in transaction creation:', updateError);
           console.error('Error details:', {
             message: updateError?.message,
             stack: updateError?.stack,
@@ -563,6 +569,13 @@ function AuthProvider({ children }: { children: ReactNode }) {
         console.log('NOTE: If this fails, check InstantDB dashboard rules to ensure authenticated users can write to users table');
         console.log('NOTE: Verify that auth.id matches transactionUserId:', transactionUserId);
         console.log('NOTE: Current instantUser.id:', instantUser?.id);
+        console.log('NOTE: Permission rule requires: users.id === auth.id');
+        console.log('NOTE: This means auth.id must be set to:', transactionUserId);
+        
+        // CRITICAL: Wait a bit longer to ensure transaction is sent to server
+        // InstantDB transactions are sent asynchronously, so we need to wait
+        console.log('Waiting for transaction to be sent to InstantDB server...');
+        await new Promise(resolve => setTimeout(resolve, 1000));
         
         // Immediately try to query the user to see if transaction was processed
         // This is a quick check - if it fails, the transaction likely wasn't sent
@@ -576,8 +589,13 @@ function AuthProvider({ children }: { children: ReactNode }) {
           const foundUser = immediateCheck?.users?.[0];
           if (foundUser) {
             console.log('✓ User found immediately after transaction! Transaction was successful.');
+            console.log('User data:', { id: foundUser.id, email: foundUser.email, hasPassword: !!foundUser.password });
           } else {
             console.log('⚠ User not found immediately - transaction may still be processing or failed');
+            console.log('This could mean:');
+            console.log('  1. Transaction is still syncing (wait longer)');
+            console.log('  2. Transaction was rejected due to permissions (auth.id not set)');
+            console.log('  3. Transaction failed silently');
           }
         } catch (queryError) {
           console.warn('Could not perform immediate query check:', queryError);
