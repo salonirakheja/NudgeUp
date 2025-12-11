@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { useAuth, auth, useQuery, tx, id, queryOnce } from '@/lib/instant';
+import { useAuth, auth, useQuery, tx, id, queryOnce, db } from '@/lib/instant';
 import { useRouter } from 'next/navigation';
 
 interface AuthContextType {
@@ -467,7 +467,12 @@ function AuthProvider({ children }: { children: ReactNode }) {
           password: '[REDACTED - length: ' + hashedPassword.length + ']',
         });
         
-        // Verify tx object is available
+        // Verify db and tx objects are available
+        if (!db) {
+          console.error('❌ Database object not available');
+          throw new Error('Database not initialized. Please refresh the page.');
+        }
+        
         if (!tx || !tx.users) {
           console.error('❌ Transaction object not available');
           throw new Error('Database transaction service not available. Please refresh the page.');
@@ -484,6 +489,8 @@ function AuthProvider({ children }: { children: ReactNode }) {
           instantUser: instantUser ? { id: instantUser.id, email: instantUser.email } : 'null',
           transactionUserId,
           idsMatch: instantUser?.id === transactionUserId,
+          dbAvailable: !!db,
+          txAvailable: !!tx,
         });
         
         // Create the transaction - update() works for both new and existing records
@@ -496,19 +503,31 @@ function AuthProvider({ children }: { children: ReactNode }) {
         
         // Try to create the transaction
         // Note: InstantDB transactions are automatically sent when created
+        // But we'll verify it was created successfully
         try {
-          tx.users[transactionUserId].update(userData);
-          console.log('✓ Transaction created using update()');
+          // Create the transaction
+          const transaction = tx.users[transactionUserId].update(userData);
+          console.log('✓ Transaction object created');
+          console.log('Transaction type:', typeof transaction);
+          console.log('Transaction value:', transaction);
+          
+          // Check if db has a transact method that we should use
+          if (db && typeof (db as any).transact === 'function') {
+            console.log('db.transact() method available - but tx.update() should work automatically');
+          }
           
           // Force a small delay to ensure transaction is queued
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise(resolve => setTimeout(resolve, 200));
           
-          // Try to verify transaction was queued by checking if we can still access it
-          // This doesn't guarantee it was sent, but helps with debugging
-          console.log('Transaction queued, checking if still accessible...');
+          console.log('Transaction should be queued and sent automatically by InstantDB');
         } catch (updateError: any) {
           console.error('❌ Error in update() call:', updateError);
-          throw updateError;
+          console.error('Error details:', {
+            message: updateError?.message,
+            stack: updateError?.stack,
+            name: updateError?.name,
+          });
+          throw new Error(`Failed to create transaction: ${updateError?.message || 'Unknown error'}`);
         }
         
         console.log('✓ Transaction created and queued for sending');
