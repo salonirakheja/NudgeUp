@@ -301,7 +301,7 @@ function AuthProvider({ children }: { children: ReactNode }) {
       // Wait for auth state to sync in React
       // The SDK method should trigger useAuth to update, but give it a moment
       console.log('Waiting for React auth state to sync...');
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, 4000)); // Increased wait time to ensure auth state syncs
       
       // Check if instantUser is now available
       if (instantUser) {
@@ -331,48 +331,39 @@ function AuthProvider({ children }: { children: ReactNode }) {
       console.log('Verified user ID from code verification:', verifiedUserId);
       console.log('Auth loading state:', authLoading);
       
-      // Wait a bit for auth state to potentially sync
-      // But don't wait too long - we'll proceed with verifiedUserId if needed
+      // CRITICAL: Wait for instantUser to be available before creating transaction
+      // InstantDB permissions require auth.id to match the user ID in the transaction
+      // auth.id is only set when instantUser is available from useAuth()
       let attempts = 0;
-      const maxAttempts = 30; // Increased to give more time for auth state to sync
+      const maxAttempts = 50; // Increased significantly to wait for auth state sync
       
-      console.log('Checking InstantDB authentication state...');
+      console.log('Waiting for InstantDB authentication state to sync...');
+      console.log('This is required for transaction permissions (auth.id must match user ID)');
       while (!instantUser && attempts < maxAttempts) {
         await new Promise(resolve => setTimeout(resolve, 300));
         attempts++;
         if (attempts % 5 === 0) {
-          console.log(`Checking auth state... attempt ${attempts}/${maxAttempts}`);
+          console.log(`Waiting for auth state... attempt ${attempts}/${maxAttempts}`);
         }
       }
 
-      console.log('After checking, instantUser:', instantUser ? { id: instantUser.id, email: instantUser.email } : 'null');
+      console.log('After waiting, instantUser:', instantUser ? { id: instantUser.id, email: instantUser.email } : 'null');
       console.log('Attempts made:', attempts);
 
-      // Determine user ID - prefer instantUser.id, but use verifiedUserId if available
-      // The verifiedUserId comes from the successful code verification, so it's valid
-      let userId: string | null = null;
-      
-      if (instantUser && instantUser.id) {
-        userId = instantUser.id;
-        console.log('✓ Using user ID from instantUser (authenticated):', userId);
-      } else if (verifiedUserId) {
-        userId = verifiedUserId;
-        console.log('✓ Using user ID from verification response:', userId);
-        console.log('Note: instantUser not synced yet, but code verification was successful.');
-        console.log('The user is authenticated with InstantDB, just not reflected in React state yet.');
-      } else {
-        console.error('❌ No user ID available. Auth state:', {
+      // CRITICAL: We MUST have instantUser available for the transaction to work
+      // InstantDB's permission system checks auth.id, which is only available when instantUser exists
+      if (!instantUser || !instantUser.id) {
+        console.error('❌ instantUser not available after waiting. Auth state:', {
           instantUser: instantUser ? 'exists' : 'null',
           verifiedUserId,
           isLoading: authLoading,
           usersData: usersData?.users?.length || 0,
         });
-        throw new Error('Authentication failed. Please go back and verify your email code again.');
+        throw new Error('Authentication state not ready. Please wait a moment and try again, or go back and verify your email code again.');
       }
 
-      if (!userId) {
-        throw new Error('Authentication failed. Please go back and verify your email code again.');
-      }
+      const userId = instantUser.id;
+      console.log('✓ Using user ID from instantUser (authenticated):', userId);
 
       const userExists = await checkUserExists(email);
       if (userExists) {
@@ -382,12 +373,7 @@ function AuthProvider({ children }: { children: ReactNode }) {
       const hashedPassword = await hashPassword(password);
       const normalizedEmail = email.toLowerCase().trim();
       
-      // Use the authenticated user's ID for the transaction
-      // This can be either instantUser.id (if synced) or verifiedUserId (from successful code verification)
-      // Since code verification succeeded, the user IS authenticated with InstantDB, so verifiedUserId is valid
-      if (!userId) {
-        throw new Error('Authentication failed. Please go back and verify your email code again.');
-      }
+      // Use instantUser.id for the transaction - this ensures auth.id matches
       const transactionUserId = userId;
       
       console.log('Creating user account:', { userId: transactionUserId, email, name });
@@ -402,11 +388,10 @@ function AuthProvider({ children }: { children: ReactNode }) {
 
       // CRITICAL: Give InstantDB WebSocket a moment to fully sync permissions after authentication
       // This ensures the authenticated user has write permissions before we attempt the transaction
-      // If we're using verifiedUserId (not instantUser), we still need to wait for auth.id to be set
       console.log('Giving InstantDB WebSocket a moment to fully sync permissions...');
       console.log('Using user ID for transaction:', transactionUserId);
-      console.log('Auth state:', { instantUser: !!instantUser, verifiedUserId: !!verifiedUserId });
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Increased wait time
+      console.log('Auth state confirmed - instantUser available:', !!instantUser);
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for permissions to sync
       
       console.log('Creating user record with ID:', transactionUserId);
       console.log('Transaction payload:', {
