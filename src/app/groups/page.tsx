@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Header } from '@/components/groups/Header';
 import { GroupCard } from '@/components/groups/GroupCard';
@@ -62,10 +63,28 @@ function GroupsPageContent() {
       </div>
 
       {/* Groups List */}
-      <div className="px-6 pt-4 flex flex-col gap-3">
-        {groups.map((group) => (
-          <GroupCard key={group.id} group={group} />
-        ))}
+      <div className="px-6 pt-4 pb-16 flex flex-col gap-3 relative">
+        {groups.length > 0 ? (
+          groups.map((group) => (
+            <GroupCard key={group.id} group={group} />
+          ))
+        ) : (
+          <div className="flex flex-col items-center justify-center py-12 relative min-h-[400px]">
+            {/* Faded bear illustration */}
+            <div className="absolute inset-0 flex items-center justify-center opacity-10">
+              <Image
+                src="/icons/bear.png"
+                alt="Bear illustration"
+                width={300}
+                height={300}
+                className="object-contain"
+              />
+            </div>
+            <p className="text-neutral-400 text-[14px] font-normal leading-[20px] text-center relative z-10" style={{ fontFamily: 'Inter, sans-serif' }}>
+              No active groups yet. Tap the + button to create or join a group!
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Choice Modal - Create or Join */}

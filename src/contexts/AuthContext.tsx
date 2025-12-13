@@ -555,6 +555,8 @@ function AuthProvider({ children }: { children: ReactNode }) {
           idsMatch: instantUser?.id === transactionUserId,
           dbAvailable: !!db,
           txAvailable: !!tx,
+          environment: process.env.NODE_ENV || 'unknown',
+          isProduction: process.env.NODE_ENV === 'production',
         });
         
         // Create the transaction - update() works for both new and existing records

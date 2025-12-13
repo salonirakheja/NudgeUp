@@ -69,8 +69,10 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  avatar: string;
-  memberSince: string;
+  avatar?: string;
+  avatarImage?: string;
+  createdAt?: number; // Timestamp when account was created
+  memberSince?: string; // Formatted date string (for display)
 }
 
 export interface CalendarDay {

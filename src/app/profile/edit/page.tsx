@@ -4,28 +4,35 @@ import { useRouter } from 'next/navigation';
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { useAuthContext } from '@/contexts/AuthContext';
 
 const EMOJI_OPTIONS = ['😊', '😀', '😎', '🤩', '😍', '🥳', '😇', '🤗', '😋', '😌', '😉', '🙂'];
 
 export default function EditProfilePage() {
   const router = useRouter();
-  const [name, setName] = useState('Saloni Rakheja');
-  const [avatar, setAvatar] = useState('😊');
+  const { user } = useAuthContext();
+  const [name, setName] = useState('');
+  const [avatar, setAvatar] = useState<string | null>(null);
   const [avatarImage, setAvatarImage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
 
-  // Load saved avatar from localStorage on mount
+  // Load saved avatar and name from localStorage and user object
   useEffect(() => {
-    const savedAvatar = localStorage.getItem('userAvatar');
-    const savedName = localStorage.getItem('userName');
-    const savedAvatarImage = localStorage.getItem('userAvatarImage');
+    // Get name from user object (database) or localStorage
+    const savedName = user?.name || (typeof window !== 'undefined' ? localStorage.getItem('userName') : null) || '';
+    setName(savedName);
+    
+    // Get avatar from localStorage (avatar is not in database yet)
+    const savedAvatar = typeof window !== 'undefined' ? localStorage.getItem('userAvatar') : null;
+    const savedAvatarImage = typeof window !== 'undefined' ? localStorage.getItem('userAvatarImage') : null;
+    
+    // Only set avatar if it exists (don't set default)
     if (savedAvatar) setAvatar(savedAvatar);
-    if (savedName) setName(savedName);
     if (savedAvatarImage) setAvatarImage(savedAvatarImage);
-  }, []);
+  }, [user]);
 
   // Close emoji picker when clicking outside
   useEffect(() => {
@@ -154,9 +161,16 @@ export default function EditProfilePage() {
   const handleSave = async () => {
     setIsLoading(true);
     try {
-      // Save name and avatar to localStorage
+      // Save name to localStorage
       localStorage.setItem('userName', name);
-      localStorage.setItem('userAvatar', avatar);
+      
+      // Save avatar only if it's set
+      if (avatar) {
+        localStorage.setItem('userAvatar', avatar);
+      } else {
+        localStorage.removeItem('userAvatar');
+      }
+      
       if (avatarImage) {
         try {
           localStorage.setItem('userAvatarImage', avatarImage);
@@ -213,8 +227,8 @@ export default function EditProfilePage() {
         {/* Avatar Section */}
         <div className="flex flex-col items-center gap-4 relative">
           <div 
-            className="w-24 h-24 bg-white rounded-full shadow-md flex justify-center items-center cursor-pointer hover:shadow-lg transition-shadow overflow-hidden relative group"
-            onClick={avatarImage ? handleAvatarImageClick : handleAvatarClick}
+            className="w-24 h-24 bg-white rounded-full shadow-md flex justify-center items-center cursor-pointer hover:shadow-lg transition-shadow overflow-hidden relative group border border-neutral-200"
+            onClick={avatarImage ? handleAvatarImageClick : (avatar ? handleAvatarClick : handleAvatarClick)}
           >
             {avatarImage ? (
               <>
@@ -229,10 +243,18 @@ export default function EditProfilePage() {
                   </span>
                 </div>
               </>
-            ) : (
+            ) : avatar ? (
               <span className="text-neutral-950 text-4xl font-normal leading-10 tracking-tight" style={{ fontFamily: 'Inter, sans-serif' }}>
                 {avatar}
               </span>
+            ) : (
+              <svg 
+                className="w-12 h-12 text-neutral-400" 
+                fill="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+              </svg>
             )}
           </div>
           

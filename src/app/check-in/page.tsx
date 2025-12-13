@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Header } from '@/components/check-in/Header';
 import { GreetingSection } from '@/components/check-in/GreetingSection';
@@ -51,19 +52,37 @@ function CheckInPageContent() {
       </div>
 
       {/* Commitments Section */}
-      <div className="px-6 pt-6 pb-16 flex flex-col">
+      <div className="px-6 pt-6 pb-16 flex flex-col relative">
         <h2 className="text-neutral-700 text-[18px] font-semibold leading-[24px]" style={{ fontFamily: 'Inter, sans-serif', marginBottom: '20px' }}>
           Your Daily Commitments
         </h2>
         
-        <div className="flex flex-col" style={{ gap: '10px' }}>
-          {commitments.map((commitment) => (
-            <HabitCard 
-              key={commitment.id} 
-              habit={commitment}
-            />
-          ))}
-        </div>
+        {commitments.length > 0 ? (
+          <div className="flex flex-col" style={{ gap: '10px' }}>
+            {commitments.map((commitment) => (
+              <HabitCard 
+                key={commitment.id} 
+                habit={commitment}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-12 relative">
+            {/* Faded bear illustration */}
+            <div className="absolute inset-0 flex items-center justify-center opacity-10">
+              <Image
+                src="/icons/bear.png"
+                alt="Bear illustration"
+                width={300}
+                height={300}
+                className="object-contain"
+              />
+            </div>
+            <p className="text-neutral-400 text-[14px] font-normal leading-[20px] text-center relative z-10" style={{ fontFamily: 'Inter, sans-serif' }}>
+              No commitments yet. Tap the + button to add your first commitment!
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Floating Action Button */}
