@@ -336,6 +336,7 @@ function HabitCard({ habit }: HabitCardProps) {
 
       {/* Card Container - Swipeable */}
       <div
+        id={`habit-${habit.id}`}
         className={`w-full bg-white rounded-2xl border transition-all relative`}
         style={{
           transform: `translateX(-${swipeOffset}px)`,

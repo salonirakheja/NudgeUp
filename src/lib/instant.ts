@@ -15,13 +15,15 @@ let db: ReturnType<typeof init> | null = null;
 
 if (typeof window !== 'undefined') {
   const envAppId = process.env.NEXT_PUBLIC_INSTANT_APP_ID;
-  console.log('InstantDB Configuration:', {
-    hasEnvVar: !!envAppId,
-    usingEnvVar: !!envAppId,
-    usingFallback: !envAppId,
-    appId: APP_ID ? `${APP_ID.substring(0, 8)}...` : 'Missing',
-    environment: process.env.NODE_ENV || 'unknown',
-  });
+  if (process.env.NODE_ENV === 'development') {
+    console.log('InstantDB Configuration:', {
+      hasEnvVar: !!envAppId,
+      usingEnvVar: !!envAppId,
+      usingFallback: !envAppId,
+      appId: APP_ID ? `${APP_ID.substring(0, 8)}...` : 'Missing',
+      environment: process.env.NODE_ENV || 'unknown',
+    });
+  }
   db = init({ appId: APP_ID });
 }
 
@@ -71,6 +73,15 @@ export type Schema = {
     streak: number;
     memberSince: number;
   };
+  nudges: {
+    id: string;
+    toUserId: string;
+    fromUserId: string;
+    habitId: string;
+    groupId: string;
+    createdAt: number;
+    resolvedAt?: number | null;
+  };
 };
 
 // Export db and individual exports separately for Turbopack compatibility
@@ -105,7 +116,10 @@ export function useAuth() {
 
 export const tx = db?.tx || ({} as any);
 export const id = () => crypto.randomUUID();
-export const queryOnce = db?.queryOnce || (async () => null);
+export const queryOnce = db?.queryOnce || (async (query: any) => {
+  console.warn('queryOnce called but db is not initialized');
+  return null;
+});
 
 // Note: auth.signInWithToken maps to signInWithCustomToken internally
 

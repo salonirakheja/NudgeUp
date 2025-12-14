@@ -10,7 +10,7 @@ interface ProgressCardProps {
 }
 
 function ProgressCard({ completed, total, commitments = [] }: ProgressCardProps) {
-  const { getWeeklyCompletionCount } = useCommitments();
+  const { getWeeklyCompletionCount, getCommitmentStreak } = useCommitments();
   
   // Separate daily and weekly habits
   const dailyHabits = commitments.filter(c => !c.frequencyType || c.frequencyType === 'daily');
@@ -41,11 +41,11 @@ function ProgressCard({ completed, total, commitments = [] }: ProgressCardProps)
   }).length;
   
   // Calculate average streak or use the highest streak (only for daily habits)
-  const averageStreak = dailyHabits.length > 0
-    ? Math.round(dailyHabits.reduce((sum, c) => sum + c.streak, 0) / dailyHabits.length)
-    : 0;
-  const maxStreak = dailyHabits.length > 0
-    ? Math.max(...dailyHabits.map(c => c.streak), 0)
+  // Only calculate streak from commitments that have actual completions
+  const streaks = dailyHabits.map(c => getCommitmentStreak(c.id));
+  const maxStreak = streaks.length > 0 ? Math.max(...streaks, 0) : 0;
+  const averageStreak = streaks.length > 0
+    ? Math.round(streaks.reduce((sum, s) => sum + s, 0) / streaks.length)
     : 0;
   const displayStreak = maxStreak > 0 ? maxStreak : averageStreak;
 

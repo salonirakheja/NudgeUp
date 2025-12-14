@@ -39,18 +39,21 @@ export const StreakStatsCards = () => {
       }
       
       // Check if all commitments for this date were completed
-      const allCompleted = commitmentsForDate.every((commitment) => {
+      const allCompleted = commitmentsForDate.length > 0 && commitmentsForDate.every((commitment) => {
         const completion = completions.find(
-          c => c.commitmentId === commitment.id && c.date === dateStr && c.completed
+          c => c.commitmentId === commitment.id && c.date === dateStr
         );
-        return completion?.completed || false;
+        // Explicitly check that completion exists and is marked as completed (true)
+        return completion !== undefined && completion.completed === true;
       });
       
       if (allCompleted) {
         streak++;
+        // Move to previous day
         currentDate.setDate(currentDate.getDate() - 1);
         currentDate.setHours(0, 0, 0, 0);
       } else {
+        // If this day is not completed, break the streak
         break;
       }
     }
@@ -99,9 +102,10 @@ export const StreakStatsCards = () => {
         // Check if all commitments for this date were completed
         const allCompleted = commitmentsForDate.every((commitment) => {
           const completion = completions.find(
-            c => c.commitmentId === commitment.id && c.date === dateStr && c.completed
+            c => c.commitmentId === commitment.id && c.date === dateStr
           );
-          return completion?.completed || false;
+          // Explicitly check that completion exists and is marked as completed (true)
+          return completion !== undefined && completion.completed === true;
         });
         
         if (allCompleted) {

@@ -8,7 +8,7 @@ export const BottomNav = () => {
   const isActive = (path: string) => pathname === path;
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 w-full max-w-[440px] mx-auto h-14 bg-white border-t border-neutral-200 flex items-center justify-around">
+    <nav className="fixed bottom-0 left-0 right-0 w-full max-w-[440px] mx-auto h-14 bg-white border-t border-neutral-200 flex items-center justify-around z-50">
       {/* Home */}
       <Link href="/check-in" className="flex flex-col items-center gap-1">
         <div className="w-5 h-5">

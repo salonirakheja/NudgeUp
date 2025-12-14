@@ -3,11 +3,13 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { useGroups } from '@/contexts/GroupsContext';
+import { CreateGroupModal } from '@/components/groups/CreateGroupModal';
 
 interface AddHabitModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (commitment: { name: string; icon: string; duration?: number; frequencyType?: 'daily' | 'weekly'; timesPerWeek?: number }) => void;
+  onSave: (commitment: { name: string; icon: string; duration?: number; frequencyType?: 'daily' | 'weekly'; timesPerWeek?: number; groupIds?: string[] }) => void;
 }
 
 const habitIcons = [
@@ -17,6 +19,7 @@ const habitIcons = [
 
 
 export const AddHabitModal = ({ isOpen, onClose, onSave }: AddHabitModalProps) => {
+  const { groups, createGroup } = useGroups();
   const [selectedIcon, setSelectedIcon] = useState<string>('');
   const [commitmentName, setCommitmentName] = useState('');
   const [duration, setDuration] = useState('');
@@ -24,8 +27,26 @@ export const AddHabitModal = ({ isOpen, onClose, onSave }: AddHabitModalProps) =
   const [customIcon, setCustomIcon] = useState<string>('');
   const [frequencyType, setFrequencyType] = useState<'daily' | 'weekly'>('daily');
   const [timesPerWeek, setTimesPerWeek] = useState<string>('3');
+  const [groupOption, setGroupOption] = useState<'none' | 'existing' | 'new'>('none');
+  const [selectedGroupId, setSelectedGroupId] = useState<string>('');
+  const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
+  const [newGroupId, setNewGroupId] = useState<string>('');
 
   if (!isOpen) return null;
+
+  const handleCreateGroup = (groupData: { name: string; icon: string; description?: string; challengeDuration?: number }) => {
+    const newGroup = createGroup({
+      name: groupData.name,
+      icon: groupData.icon,
+      description: groupData.description,
+      totalDays: groupData.challengeDuration,
+    });
+    setNewGroupId(newGroup.id);
+    setShowCreateGroupModal(false);
+    // Automatically select the newly created group
+    setGroupOption('existing');
+    setSelectedGroupId(newGroup.id);
+  };
 
   const handleSave = () => {
     if (!commitmentName.trim() || !selectedIcon) {
@@ -42,12 +63,31 @@ export const AddHabitModal = ({ isOpen, onClose, onSave }: AddHabitModalProps) =
       }
     }
 
+    // Validate group selection
+    let groupIds: string[] | undefined = undefined;
+    if (groupOption === 'existing') {
+      if (!selectedGroupId) {
+        alert('Please select a group');
+        return;
+      }
+      groupIds = [selectedGroupId];
+    } else if (groupOption === 'new') {
+      if (!newGroupId) {
+        // If user selected "new" but hasn't created a group yet, don't block them
+        // They can create the commitment without a group
+        groupIds = undefined;
+      } else {
+        groupIds = [newGroupId];
+      }
+    }
+
     onSave({
       name: commitmentName,
       icon: selectedIcon,
       duration: duration ? parseInt(duration) : undefined,
       frequencyType: frequencyType,
       timesPerWeek: frequencyType === 'weekly' ? parseInt(timesPerWeek) : undefined,
+      groupIds: groupIds,
     });
 
     // Reset form
@@ -58,6 +98,9 @@ export const AddHabitModal = ({ isOpen, onClose, onSave }: AddHabitModalProps) =
     setCustomIcon('');
     setFrequencyType('daily');
     setTimesPerWeek('3');
+    setGroupOption('none');
+    setSelectedGroupId('');
+    setNewGroupId('');
     onClose();
   };
 
@@ -183,9 +226,9 @@ export const AddHabitModal = ({ isOpen, onClose, onSave }: AddHabitModalProps) =
           <Input
             type="text"
             placeholder="e.g., Morning walk"
-                value={commitmentName}
-                onChange={(e) => setCommitmentName(e.target.value)}
-            className="w-full h-14 px-5 py-4 bg-neutral-50 text-neutral-400 placeholder:text-neutral-400 outline outline-2 outline-offset-[-2px] outline-transparent"
+            value={commitmentName}
+            onChange={(e) => setCommitmentName(e.target.value)}
+            className="w-full h-14 px-5 py-4 bg-neutral-50 text-neutral-700 placeholder:text-neutral-400 outline outline-2 outline-offset-[-2px] outline-transparent"
           />
         </div>
 
@@ -245,7 +288,7 @@ export const AddHabitModal = ({ isOpen, onClose, onSave }: AddHabitModalProps) =
                     setTimesPerWeek(value);
                   }
                 }}
-                className="w-full h-14 px-5 py-4 bg-neutral-50 text-neutral-400 placeholder:text-neutral-400 outline outline-2 outline-offset-[-2px] outline-transparent"
+                className="w-full h-14 px-5 py-4 bg-neutral-50 text-neutral-700 placeholder:text-neutral-400 outline outline-2 outline-offset-[-2px] outline-transparent"
               />
             </div>
           </div>
@@ -262,11 +305,102 @@ export const AddHabitModal = ({ isOpen, onClose, onSave }: AddHabitModalProps) =
               placeholder="e.g., 30"
               value={duration}
               onChange={(e) => setDuration(e.target.value)}
-              className="w-full h-14 px-5 py-4 bg-neutral-50 text-neutral-400 placeholder:text-neutral-400 pr-16 outline outline-2 outline-offset-[-2px] outline-transparent"
+              className="w-full h-14 px-5 py-4 bg-neutral-50 text-neutral-700 placeholder:text-neutral-400 pr-16 outline outline-2 outline-offset-[-2px] outline-transparent"
             />
             <span className="absolute right-5 top-1/2 transform -translate-y-1/2 text-neutral-500 text-[13px] font-medium leading-[18px]" style={{ fontFamily: 'Inter, sans-serif' }}>
               days
             </span>
+          </div>
+        </div>
+
+        {/* Group Selection */}
+        <div className="px-5 mt-12 flex-shrink-0">
+          <label className="block text-neutral-700 text-[14px] font-medium leading-[20px] mb-4" style={{ fontFamily: 'Inter, sans-serif' }}>
+            Add to a group (optional)
+          </label>
+          <div className="flex flex-col gap-3">
+            {/* None option */}
+            <button
+              type="button"
+              onClick={() => {
+                setGroupOption('none');
+                setSelectedGroupId('');
+                setNewGroupId('');
+              }}
+              className={`
+                w-full h-14 rounded-xl font-medium transition-all text-left px-5
+                ${groupOption === 'none'
+                  ? 'bg-primary-400 text-black'
+                  : 'bg-neutral-50 text-neutral-600 hover:bg-neutral-100'
+                }
+              `}
+              style={{ fontFamily: 'Inter, sans-serif' }}
+            >
+              No group
+            </button>
+
+            {/* Existing group option */}
+            {groups.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setGroupOption('existing')}
+                  className={`
+                    w-full h-14 rounded-xl font-medium transition-all text-left px-5
+                    ${groupOption === 'existing'
+                      ? 'bg-primary-400 text-black'
+                      : 'bg-neutral-50 text-neutral-600 hover:bg-neutral-100'
+                    }
+                  `}
+                  style={{ fontFamily: 'Inter, sans-serif' }}
+                >
+                  Add to existing group
+                </button>
+                {groupOption === 'existing' && (
+                  <div className="mt-2 pl-2">
+                    <select
+                      value={selectedGroupId}
+                      onChange={(e) => setSelectedGroupId(e.target.value)}
+                      className="w-full h-12 px-4 py-3 bg-white border-2 border-neutral-200 rounded-xl text-neutral-700 text-[14px] font-normal"
+                      style={{ fontFamily: 'Inter, sans-serif' }}
+                    >
+                      <option value="">Select a group...</option>
+                      {groups.map((group) => (
+                        <option key={group.id} value={group.id}>
+                          {group.icon} {group.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* New group option */}
+            <button
+              type="button"
+              onClick={() => {
+                setGroupOption('new');
+                setShowCreateGroupModal(true);
+              }}
+              className={`
+                w-full h-14 rounded-xl font-medium transition-all text-left px-5
+                ${groupOption === 'new'
+                  ? 'bg-primary-400 text-black'
+                  : 'bg-neutral-50 text-neutral-600 hover:bg-neutral-100'
+                }
+              `}
+              style={{ fontFamily: 'Inter, sans-serif' }}
+            >
+              Create new group
+            </button>
+            {groupOption === 'new' && newGroupId && (
+              <div className="mt-2 pl-2">
+                <div className="px-4 py-2 bg-primary-50 rounded-xl text-primary-700 text-[13px] font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>
+                  ✓ Group created! This commitment will be added to it.
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -306,6 +440,19 @@ export const AddHabitModal = ({ isOpen, onClose, onSave }: AddHabitModalProps) =
           </button>
         </div>
       </div>
+
+      {/* Create Group Modal */}
+      <CreateGroupModal
+        isOpen={showCreateGroupModal}
+        onClose={() => {
+          setShowCreateGroupModal(false);
+          // If user closes without creating, reset to 'none'
+          if (!newGroupId) {
+            setGroupOption('none');
+          }
+        }}
+        onCreate={handleCreateGroup}
+      />
     </div>
   );
 };

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { useCommitments } from '@/contexts/CommitmentsContext';
 
 interface Member {
@@ -19,7 +19,6 @@ interface TrackerTableProps {
 
 export const TrackerTable = ({ members }: TrackerTableProps) => {
   const [isExpanded, setIsExpanded] = useState(true);
-  const router = useRouter();
   const params = useParams();
   const groupId = params.id as string;
   const { commitments, getCompletionForDate } = useCommitments();
@@ -40,10 +39,6 @@ export const TrackerTable = ({ members }: TrackerTableProps) => {
     }
     // For other members, use mock data or return empty (in real app, fetch from API)
     return members.find(m => m.id === memberId)?.commitmentCompletions || {};
-  };
-
-  const handleMemberClick = (memberId: string) => {
-    router.push(`/groups/${groupId}/members/${memberId}`);
   };
 
   return (
@@ -114,8 +109,7 @@ export const TrackerTable = ({ members }: TrackerTableProps) => {
           return (
             <div 
               key={member.id} 
-              onClick={() => handleMemberClick(member.id)}
-              className="px-2 py-2 rounded-2xl flex items-center gap-2 hover:bg-neutral-50 transition-colors cursor-pointer"
+              className="px-2 py-2 rounded-2xl flex items-center gap-2"
             >
               {/* Member Info */}
               <div className="flex-1 flex items-center gap-3 min-w-0">

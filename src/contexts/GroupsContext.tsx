@@ -160,7 +160,41 @@ export function GroupsProvider({ children }: { children: ReactNode }) {
       return;
     }
     
-    const storedGroups = localStorage.getItem(STORAGE_KEY_GROUPS);
+    let storedGroups = localStorage.getItem(STORAGE_KEY_GROUPS);
+    
+    // If no groups found with current user ID, try to find groups from other user IDs
+    // This helps recover groups if user ID changed
+    if (!storedGroups && typeof window !== 'undefined') {
+      const allKeys = Object.keys(localStorage);
+      const groupKeys = allKeys.filter(key => key.startsWith('nudgeup_groups_'));
+      
+      // Try to find groups from any user ID (in case user ID changed)
+      for (const key of groupKeys) {
+        const groupsData = localStorage.getItem(key);
+        if (groupsData) {
+          try {
+            const groups = JSON.parse(groupsData);
+            // Check if any of these groups contain the current user as a member
+            const hasCurrentUser = groups.some((group: Group) => {
+              if (!group.memberList) return false;
+              return group.memberList.some((member: GroupMember) => 
+                member.id === userId || member.id === 'current-user'
+              );
+            });
+            
+            if (hasCurrentUser && groups.length > 0) {
+              console.log('🔍 Found groups under different user ID key:', key, 'Recovering groups...');
+              storedGroups = groupsData;
+              // Also copy to current user's key for future use
+              localStorage.setItem(STORAGE_KEY_GROUPS, groupsData);
+              break;
+            }
+          } catch (e) {
+            console.warn('Error checking groups from key:', key, e);
+          }
+        }
+      }
+    }
     
     if (storedGroups) {
       try {

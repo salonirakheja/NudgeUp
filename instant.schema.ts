@@ -52,6 +52,14 @@ const _schema = i.schema({
       streak: i.number(),
       memberSince: i.number(),
     }),
+    nudges: i.entity({
+      toUserId: i.string().indexed(),
+      fromUserId: i.string().indexed(),
+      habitId: i.string().indexed(),
+      groupId: i.string(),
+      createdAt: i.number().indexed(),
+      resolvedAt: i.number().optional().indexed(),
+    }),
   },
   links: {
     $usersLinkedPrimaryUser: {

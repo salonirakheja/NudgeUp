@@ -2,16 +2,47 @@
 
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
+import { useAuthContext } from '@/contexts/AuthContext';
+import { useCommitments } from '@/contexts/CommitmentsContext';
+import { useGroups } from '@/contexts/GroupsContext';
+import { tx, id, db } from '@/lib/instant';
 
 export const SendEncouragementButton = () => {
   const params = useParams();
   const groupId = params.id as string;
   const memberId = params.memberId as string;
   const [isSending, setIsSending] = useState(false);
+  const { user } = useAuthContext();
+  const { commitments } = useCommitments();
+  const { getGroupMembers } = useGroups();
+  const currentUserId = user?.id || 'anonymous';
 
   const handleSend = async () => {
     setIsSending(true);
     try {
+      if (currentUserId === 'anonymous') {
+        alert('Please sign in to send encouragement.');
+        setIsSending(false);
+        return;
+      }
+
+      // Get shared commitments for this group
+      const sharedCommitments = commitments.filter(c => c.groupIds?.includes(groupId));
+      
+      if (sharedCommitments.length === 0) {
+        alert('No shared commitments in this group to send encouragement about.');
+        setIsSending(false);
+        return;
+      }
+
+      // Get actual member ID
+      const actualMemberId = memberId === 'current-user' ? currentUserId : memberId;
+      if (actualMemberId === 'anonymous' || actualMemberId === currentUserId) {
+        alert('Unable to send encouragement: Invalid recipient.');
+        setIsSending(false);
+        return;
+      }
+
       // Check if we can send encouragement (prevent spam)
       const STORAGE_KEY_NUDGES = 'nudgeup_nudges';
       const stored = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY_NUDGES) : null;
@@ -32,9 +63,31 @@ export const SendEncouragementButton = () => {
         return;
       }
       
-      // Save encouragement record
+      // Create nudges in InstantDB for each shared commitment
+      let nudgeCount = 0;
+      for (const commitment of sharedCommitments) {
+        try {
+          const nudgeId = id();
+          const nudgeData = {
+            toUserId: actualMemberId,
+            fromUserId: currentUserId,
+            habitId: commitment.id,
+            groupId,
+            createdAt: now,
+            resolvedAt: null,
+          };
+          
+          await db.transact(tx.nudges[nudgeId].update(nudgeData));
+          nudgeCount++;
+          console.log('✅ Created encouragement nudge:', { nudgeId, ...nudgeData });
+        } catch (error) {
+          console.error(`❌ Error creating encouragement nudge for commitment ${commitment.id}:`, error);
+        }
+      }
+      
+      // Also save encouragement record to localStorage for rate limiting
       const encouragement = {
-        id: `${Date.now()}-${memberId}-encouragement`,
+        id: `${now}-${memberId}-encouragement`,
         groupId,
         memberId,
         type: 'encouragement',
@@ -46,10 +99,9 @@ export const SendEncouragementButton = () => {
         localStorage.setItem(STORAGE_KEY_NUDGES, JSON.stringify(nudges));
       }
       
-      // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 500));
       
-      alert('Encouragement sent! 💪');
+      alert(`Encouragement sent! 💪`);
     } catch (error) {
       console.error('Error sending encouragement:', error);
       alert('Failed to send encouragement. Please try again.');

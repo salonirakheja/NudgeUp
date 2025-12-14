@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter, useParams } from 'next/navigation';
 import { Commitment } from '@/types';
 import { useCommitments } from '@/contexts/CommitmentsContext';
 
@@ -21,15 +20,8 @@ interface HabitTrackerProps {
 
 export const HabitTracker = ({ habit, members }: HabitTrackerProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const router = useRouter();
-  const params = useParams();
-  const groupId = params.id as string;
   const { getCompletionForDate } = useCommitments();
   const today = new Date().toISOString().split('T')[0];
-
-  const handleMemberClick = (memberId: string) => {
-    router.push(`/groups/${groupId}/members/${memberId}`);
-  };
 
   // Get completion status for current user
   const getMemberCommitmentCompletion = (memberId: string) => {
@@ -98,8 +90,7 @@ export const HabitTracker = ({ habit, members }: HabitTrackerProps) => {
             return (
               <div 
                 key={member.id} 
-                onClick={() => handleMemberClick(member.id)}
-                className="px-2 py-2 rounded-2xl flex items-center gap-9 hover:bg-neutral-50 transition-colors cursor-pointer"
+                className="px-2 py-2 rounded-2xl flex items-center gap-9"
               >
                 {/* Member Info */}
                 <div className="flex-1 flex items-center gap-3">

@@ -5,6 +5,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { useAuthContext } from '@/contexts/AuthContext';
+import { db, tx } from '@/lib/instant';
 
 const EMOJI_OPTIONS = ['😊', '😀', '😎', '🤩', '😍', '🥳', '😇', '🤗', '😋', '😌', '😉', '🙂'];
 
@@ -161,7 +162,44 @@ export default function EditProfilePage() {
   const handleSave = async () => {
     setIsLoading(true);
     try {
-      // Save name to localStorage
+      // Save name to database if user is logged in
+      if (user?.id && db && tx) {
+        try {
+          const userId = user.id;
+          if (tx.users && tx.users[userId]) {
+            const userData = { name: name.trim() };
+            console.log('Saving user name to database:', { userId, name: userData.name });
+            
+            // Use db.transact() to wrap the transaction (same pattern as account creation)
+            if (db && typeof (db as any).transact === 'function') {
+              (db as any).transact(
+                tx.users[userId].update(userData)
+              );
+              console.log('✓ User name saved to database via db.transact()');
+            } else {
+              // Fallback to direct update
+              tx.users[userId].update(userData);
+              console.log('✓ User name saved to database via tx.update()');
+            }
+            // Small delay to ensure transaction is queued and sent
+            await new Promise(resolve => setTimeout(resolve, 500));
+            console.log('Transaction should be sent to InstantDB');
+          } else {
+            console.warn('tx.users[userId] not available, userId:', userId);
+          }
+        } catch (dbError) {
+          console.error('Error saving name to database:', dbError);
+          // Continue with localStorage save even if database save fails
+        }
+      } else {
+        console.warn('Cannot save to database - missing user.id, db, or tx:', {
+          hasUserId: !!user?.id,
+          hasDb: !!db,
+          hasTx: !!tx
+        });
+      }
+      
+      // Save name to localStorage (for backward compatibility and immediate access)
       localStorage.setItem('userName', name);
       
       // Save avatar only if it's set

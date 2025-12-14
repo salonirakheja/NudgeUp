@@ -767,14 +767,12 @@ function AuthProvider({ children }: { children: ReactNode }) {
       await auth.signOut();
       setLocalUser(null);
       
-      // Clear only non-user-specific localStorage data (legacy keys)
+      // Clear only legacy localStorage data (keep user profile data)
+      // Don't clear userName, userAvatar, userAvatarImage - these should persist
       const keysToRemove = [
         'nudgeup_userName',
         'nudgeup_userAvatar',
         'nudgeup_userEmail',
-        'userAvatar',
-        'userName',
-        'userAvatarImage',
       ];
       
       keysToRemove.forEach(key => {

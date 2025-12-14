@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useCommitments } from '@/contexts/CommitmentsContext';
 import { DateHabitsModal } from './DateHabitsModal';
 
@@ -42,7 +42,7 @@ const getTextColor = (completion: CompletionLevel) => {
 };
 
 export const CalendarGrid = () => {
-  const { getCompletionPercentageForDate } = useCommitments();
+  const { getCompletionPercentageForDate, completions, commitments } = useCommitments();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedDateDisplay, setSelectedDateDisplay] = useState<string>('');
@@ -139,24 +139,30 @@ export const CalendarGrid = () => {
     setSelectedDateDisplay('');
   };
 
-  const days: (DayData | null)[] = [];
-  
-  // Add empty cells for days before the first day of the month
-  for (let i = 0; i < firstDay; i++) {
-    days.push(null);
-  }
+  // Recalculate days array when completions or commitments change
+  // Use useMemo to ensure recalculation when dependencies change
+  const days: (DayData | null)[] = useMemo(() => {
+    const result: (DayData | null)[] = [];
+    
+    // Add empty cells for days before the first day of the month
+    for (let i = 0; i < firstDay; i++) {
+      result.push(null);
+    }
 
-  // Add all days of the month
-  for (let day = 1; day <= daysInMonth; day++) {
-    // Create date string in YYYY-MM-DD format without timezone conversion
-    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    const completion = getCompletionPercentageForDate(dateStr);
-    days.push({
-      date: day,
-      completion,
-      isToday: day === todayDate,
-    });
-  }
+    // Add all days of the month
+    for (let day = 1; day <= daysInMonth; day++) {
+      // Create date string in YYYY-MM-DD format without timezone conversion
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const completion = getCompletionPercentageForDate(dateStr);
+      result.push({
+        date: day,
+        completion,
+        isToday: day === todayDate,
+      });
+    }
+    
+    return result;
+  }, [year, month, firstDay, daysInMonth, todayDate, completions, commitments, getCompletionPercentageForDate]);
 
   const weekStart = getWeekStart(currentDate);
   const weekEnd = new Date(weekStart);

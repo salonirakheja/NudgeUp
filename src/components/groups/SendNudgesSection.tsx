@@ -3,6 +3,9 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { useCommitments } from '@/contexts/CommitmentsContext';
+import { useAuthContext } from '@/contexts/AuthContext';
+import { useGroups } from '@/contexts/GroupsContext';
+import { tx, id, db } from '@/lib/instant';
 
 interface NudgeCardProps {
   title: string;
@@ -104,6 +107,9 @@ export const SendNudgesSection = ({ groupId, groupName, inviteCode, members, tot
   const [isSending, setIsSending] = useState<string | null>(null);
   const params = useParams();
   const { commitments, completions } = useCommitments();
+  const { user } = useAuthContext();
+  const { getGroupMembers } = useGroups();
+  const currentUserId = user?.id || 'anonymous';
   
   // Calculate actual pending and inactive members
   const todayObj = new Date();
@@ -126,26 +132,87 @@ export const SendNudgesSection = ({ groupId, groupName, inviteCode, members, tot
   
   const actualTotalMembers = members.length;
 
+  // Get shared commitments for this group
+  const sharedCommitments = commitments.filter(c => c.groupIds?.includes(groupId));
+
+  // Helper to get actual user ID for a member
+  const getActualMemberUserId = (memberId: string): string => {
+    if (memberId === 'current-user') {
+      return currentUserId;
+    }
+    const groupMembers = getGroupMembers(groupId);
+    const member = groupMembers.find(m => m.id === memberId || (m.id === 'current-user' && memberId === currentUserId));
+    if (member) {
+      if (member.id === 'current-user') {
+        return currentUserId;
+      }
+      return member.id;
+    }
+    return memberId;
+  };
+
   const handleSendEntireGroup = async () => {
     if (!canNudge(groupId, undefined, 'entire_group')) {
       alert('Please wait at least 1 hour before nudging the entire group again.');
       return;
     }
     
+    if (currentUserId === 'anonymous') {
+      alert('Please sign in to send nudges.');
+      return;
+    }
+
+    if (sharedCommitments.length === 0) {
+      alert('No shared commitments in this group to nudge about.');
+      return;
+    }
+    
     setIsSending('entire_group');
     try {
+      const now = Date.now();
+      const allMembers = members.filter(m => m.id !== 'current-user');
+      let nudgeCount = 0;
+
+      // Create nudges in InstantDB for each member and each shared commitment
+      for (const member of allMembers) {
+        const actualMemberId = getActualMemberUserId(member.id);
+        if (actualMemberId === 'anonymous' || actualMemberId === currentUserId) {
+          continue; // Skip invalid or self
+        }
+
+        for (const commitment of sharedCommitments) {
+          try {
+            const nudgeId = id();
+            const nudgeData = {
+              toUserId: actualMemberId,
+              fromUserId: currentUserId,
+              habitId: commitment.id,
+              groupId,
+              createdAt: now,
+              resolvedAt: null,
+            };
+            
+            await db.transact(tx.nudges[nudgeId].update(nudgeData));
+            nudgeCount++;
+            console.log('✅ Created nudge:', { nudgeId, ...nudgeData });
+          } catch (error) {
+            console.error(`❌ Error creating nudge for member ${actualMemberId}, commitment ${commitment.id}:`, error);
+          }
+        }
+      }
+
+      // Also save to localStorage for rate limiting
       const nudge: NudgeRecord = {
         id: Date.now().toString(),
         groupId,
         type: 'entire_group',
-        timestamp: Date.now(),
+        timestamp: now,
       };
       saveNudge(nudge);
       
-      // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 500));
       
-      alert(`Nudge sent to all ${actualTotalMembers} members!`);
+      alert(`Nudge sent to all ${actualTotalMembers} members for ${sharedCommitments.length} commitment(s)!`);
     } catch (error) {
       console.error('Error sending nudge:', error);
       alert('Failed to send nudge. Please try again.');
@@ -159,27 +226,67 @@ export const SendNudgesSection = ({ groupId, groupName, inviteCode, members, tot
       alert('No pending members to nudge.');
       return;
     }
+
+    if (currentUserId === 'anonymous') {
+      alert('Please sign in to send nudges.');
+      return;
+    }
+
+    if (sharedCommitments.length === 0) {
+      alert('No shared commitments in this group to nudge about.');
+      return;
+    }
     
     setIsSending('pending');
     try {
-      const nudges: NudgeRecord[] = actualPendingMembers.map(member => ({
-        id: `${Date.now()}-${member.id}`,
-        groupId,
-        memberId: member.id,
-        type: 'pending',
-        timestamp: Date.now(),
-      }));
-      
-      nudges.forEach(nudge => {
-        if (canNudge(groupId, nudge.memberId, 'pending')) {
-          saveNudge(nudge);
+      const now = Date.now();
+      let nudgeCount = 0;
+
+      // Create nudges in InstantDB for each pending member and each shared commitment
+      for (const member of actualPendingMembers) {
+        const actualMemberId = getActualMemberUserId(member.id);
+        if (actualMemberId === 'anonymous' || actualMemberId === currentUserId) {
+          continue; // Skip invalid or self
         }
-      });
+
+        if (!canNudge(groupId, member.id, 'pending')) {
+          continue; // Skip if rate limited
+        }
+
+        for (const commitment of sharedCommitments) {
+          try {
+            const nudgeId = id();
+            const nudgeData = {
+              toUserId: actualMemberId,
+              fromUserId: currentUserId,
+              habitId: commitment.id,
+              groupId,
+              createdAt: now,
+              resolvedAt: null,
+            };
+            
+            await db.transact(tx.nudges[nudgeId].update(nudgeData));
+            nudgeCount++;
+            console.log('✅ Created nudge:', { nudgeId, ...nudgeData });
+          } catch (error) {
+            console.error(`❌ Error creating nudge for member ${actualMemberId}, commitment ${commitment.id}:`, error);
+          }
+        }
+
+        // Also save to localStorage for rate limiting
+        const nudge: NudgeRecord = {
+          id: `${now}-${member.id}`,
+          groupId,
+          memberId: member.id,
+          type: 'pending',
+          timestamp: now,
+        };
+        saveNudge(nudge);
+      }
       
-      // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 500));
       
-      alert(`Nudge sent to ${actualPendingCount} pending member(s)!`);
+      alert(`Nudge sent to ${actualPendingCount} pending member(s) for ${sharedCommitments.length} commitment(s)!`);
     } catch (error) {
       console.error('Error sending nudge:', error);
       alert('Failed to send nudge. Please try again.');
@@ -193,27 +300,67 @@ export const SendNudgesSection = ({ groupId, groupName, inviteCode, members, tot
       alert('No inactive members to nudge.');
       return;
     }
+
+    if (currentUserId === 'anonymous') {
+      alert('Please sign in to send nudges.');
+      return;
+    }
+
+    if (sharedCommitments.length === 0) {
+      alert('No shared commitments in this group to nudge about.');
+      return;
+    }
     
     setIsSending('inactive');
     try {
-      const nudges: NudgeRecord[] = inactiveMembers.map(member => ({
-        id: `${Date.now()}-${member.id}`,
-        groupId,
-        memberId: member.id,
-        type: 'inactive',
-        timestamp: Date.now(),
-      }));
-      
-      nudges.forEach(nudge => {
-        if (canNudge(groupId, nudge.memberId, 'inactive')) {
-          saveNudge(nudge);
+      const now = Date.now();
+      let nudgeCount = 0;
+
+      // Create nudges in InstantDB for each inactive member and each shared commitment
+      for (const member of inactiveMembers) {
+        const actualMemberId = getActualMemberUserId(member.id);
+        if (actualMemberId === 'anonymous' || actualMemberId === currentUserId) {
+          continue; // Skip invalid or self
         }
-      });
+
+        if (!canNudge(groupId, member.id, 'inactive')) {
+          continue; // Skip if rate limited
+        }
+
+        for (const commitment of sharedCommitments) {
+          try {
+            const nudgeId = id();
+            const nudgeData = {
+              toUserId: actualMemberId,
+              fromUserId: currentUserId,
+              habitId: commitment.id,
+              groupId,
+              createdAt: now,
+              resolvedAt: null,
+            };
+            
+            await db.transact(tx.nudges[nudgeId].update(nudgeData));
+            nudgeCount++;
+            console.log('✅ Created nudge:', { nudgeId, ...nudgeData });
+          } catch (error) {
+            console.error(`❌ Error creating nudge for member ${actualMemberId}, commitment ${commitment.id}:`, error);
+          }
+        }
+
+        // Also save to localStorage for rate limiting
+        const nudge: NudgeRecord = {
+          id: `${now}-${member.id}`,
+          groupId,
+          memberId: member.id,
+          type: 'inactive',
+          timestamp: now,
+        };
+        saveNudge(nudge);
+      }
       
-      // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 500));
       
-      alert(`Encouragement sent to ${inactiveCount} inactive member(s)!`);
+      alert(`Encouragement sent to ${inactiveCount} inactive member(s) for ${sharedCommitments.length} commitment(s)!`);
     } catch (error) {
       console.error('Error sending nudge:', error);
       alert('Failed to send encouragement. Please try again.');
