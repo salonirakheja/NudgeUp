@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthContext } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/Button';
@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/Input';
 import { AuthLayout } from '@/components/auth/AuthLayout';
 import { CodeVerificationScreen } from '@/components/auth/CodeVerificationScreen';
 
-export default function ResetPasswordPage() {
+function ResetPasswordContent() {
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -149,6 +149,24 @@ export default function ResetPasswordPage() {
         </Button>
       </form>
     </AuthLayout>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={
+      <AuthLayout
+        title="Set new password"
+        subtitle="Loading..."
+        illustrationSize={200}
+      >
+        <div className="w-full flex flex-col gap-4">
+          <div className="text-neutral-500 text-sm text-center">Loading...</div>
+        </div>
+      </AuthLayout>
+    }>
+      <ResetPasswordContent />
+    </Suspense>
   );
 }
 
