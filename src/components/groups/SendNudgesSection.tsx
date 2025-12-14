@@ -192,6 +192,9 @@ export const SendNudgesSection = ({ groupId, groupName, inviteCode, members, tot
               resolvedAt: null,
             };
             
+            if (!db) {
+              throw new Error('Database not initialized');
+            }
             await db.transact(tx.nudges[nudgeId].update(nudgeData));
             nudgeCount++;
             console.log('✅ Created nudge:', { nudgeId, ...nudgeData });
@@ -265,6 +268,9 @@ export const SendNudgesSection = ({ groupId, groupName, inviteCode, members, tot
               resolvedAt: null,
             };
             
+            if (!db) {
+              throw new Error('Database not initialized');
+            }
             await db.transact(tx.nudges[nudgeId].update(nudgeData));
             nudgeCount++;
             console.log('✅ Created nudge:', { nudgeId, ...nudgeData });
@@ -339,6 +345,9 @@ export const SendNudgesSection = ({ groupId, groupName, inviteCode, members, tot
               resolvedAt: null,
             };
             
+            if (!db) {
+              throw new Error('Database not initialized');
+            }
             await db.transact(tx.nudges[nudgeId].update(nudgeData));
             nudgeCount++;
             console.log('✅ Created nudge:', { nudgeId, ...nudgeData });

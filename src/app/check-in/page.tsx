@@ -43,7 +43,7 @@ function CheckInPageContent() {
   const totalCommitments = commitments.length;
 
   // Query nudges from InstantDB
-  const { data: nudgesData, isLoading: nudgesLoading, error: queryError } = useQuery(
+  const queryResult = useQuery(
     currentUserId && currentUserId !== 'anonymous'
       ? {
           nudges: {
@@ -65,6 +65,8 @@ function CheckInPageContent() {
         }
       : null
   );
+  const { data: nudgesData, isLoading: nudgesLoading } = queryResult;
+  const queryError = 'error' in queryResult ? queryResult.error : undefined;
 
   // Debug: Log query results (only in development)
   useEffect(() => {
@@ -98,7 +100,7 @@ function CheckInPageContent() {
           if (!queryOnce || typeof queryOnce !== 'function') {
             return;
           }
-          const allNudgesData = await queryOnce({ nudges: {} });
+          const allNudgesData = await queryOnce({ nudges: {} }) as any;
           const allNudges = allNudgesData?.nudges || [];
           
           const nudgesForCurrentUser = allNudges.filter((n: any) => n.toUserId === currentUserId);
@@ -185,20 +187,20 @@ function CheckInPageContent() {
         return {
           id: nudge.id,
           senderId: nudge.fromUserId,
-          senderName: sender?.name || 'Someone',
-          senderAvatar: sender?.avatarImage || sender?.avatar || '😊',
+          senderName: String(sender?.name || 'Someone'),
+          senderAvatar: String(sender?.avatarImage || sender?.avatar || '😊'),
           groupId: nudge.groupId,
           groupName: group?.name || 'Group',
           commitmentId: nudge.habitId,
           commitmentName: commitment?.name || 'A commitment',
           commitmentIcon: commitment?.icon || '📝',
           type: 'individual',
-          timestamp: nudge.createdAt || Date.now(),
+          timestamp: Number(nudge.createdAt || Date.now()),
           read: false, // We filter by resolvedAt === null, so they're all unread
-        };
+        } as ReceivedNudge;
       });
       
-      return mapped;
+      return mapped as ReceivedNudge[];
     } catch (error) {
       console.error('❌ Error transforming nudges:', error);
       return [];

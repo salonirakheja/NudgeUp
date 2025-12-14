@@ -65,7 +65,7 @@ export default function NotificationsPage() {
   }, []);
 
   // Query nudges from InstantDB
-  const { data: nudgesData, isLoading: nudgesLoading, error: queryError } = useQuery(
+  const queryResult = useQuery(
     currentUserId && currentUserId !== 'anonymous'
       ? {
           nudges: {
@@ -83,6 +83,8 @@ export default function NotificationsPage() {
         }
       : null
   );
+  const { data: nudgesData, isLoading: nudgesLoading } = queryResult;
+  const queryError = 'error' in queryResult ? queryResult.error : undefined;
 
   // Log query errors
   useEffect(() => {
@@ -118,18 +120,18 @@ export default function NotificationsPage() {
           return {
             id: nudge.id,
             senderId: nudge.fromUserId,
-            senderName: sender?.name || 'Someone',
-            senderAvatar: sender?.avatarImage || sender?.avatar || '😊',
+            senderName: String(sender?.name || 'Someone'),
+            senderAvatar: String(sender?.avatarImage || sender?.avatar || '😊'),
             groupId: nudge.groupId,
             groupName: group?.name || 'Group',
             commitmentId: nudge.habitId,
             commitmentName: commitment?.name || 'Commitment',
             commitmentIcon: commitment?.icon || '📝',
             type: 'individual',
-            timestamp: nudge.createdAt || Date.now(),
+            timestamp: Number(nudge.createdAt || Date.now()),
             read: false, // We filter by resolvedAt === null, so they're all unread
-          };
-        });
+          } as ReceivedNudge;
+        }) as ReceivedNudge[];
     } catch (error) {
       console.error('❌ Error transforming nudges in notifications:', error);
       return [];

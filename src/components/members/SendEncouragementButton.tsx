@@ -77,6 +77,9 @@ export const SendEncouragementButton = () => {
             resolvedAt: null,
           };
           
+          if (!db) {
+            throw new Error('Database not initialized');
+          }
           await db.transact(tx.nudges[nudgeId].update(nudgeData));
           nudgeCount++;
           console.log('✅ Created encouragement nudge:', { nudgeId, ...nudgeData });
