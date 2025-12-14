@@ -825,27 +825,15 @@ function AuthProvider({ children }: { children: ReactNode }) {
       const normalizedEmail = email.toLowerCase().trim();
       console.log('Resetting password for:', normalizedEmail);
 
-      // First verify the magic code to authenticate the user
-      // Use the same method as verifyMagicCode function (signInWithMagicCode)
-      if (!auth || typeof auth.signInWithMagicCode !== 'function') {
-        throw new Error('Authentication service not available. Please refresh the page.');
-      }
-
-      const result = await auth.signInWithMagicCode({ 
-        email: normalizedEmail, 
-        code: code.trim() 
-      });
-      console.log('Magic code verified successfully');
-
-      // Wait for authentication to complete
-      let attempts = 0;
-      while (!instantUser && attempts < 20) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-        attempts++;
-      }
-
+      // Code should already be verified by verifyMagicCode in the UI
+      // Just check that user is authenticated
       if (!instantUser) {
-        throw new Error('Verification failed. Please try again.');
+        throw new Error('Please verify your code first before resetting password.');
+      }
+
+      // Verify the authenticated user's email matches
+      if (instantUser.email?.toLowerCase().trim() !== normalizedEmail) {
+        throw new Error('Email mismatch. Please verify your code again.');
       }
 
       // Hash the new password
