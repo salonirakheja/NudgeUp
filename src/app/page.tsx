@@ -190,17 +190,26 @@ export default function Home() {
         </Button>
 
         {showPassword && (
-          <button
-            type="button"
-            onClick={() => {
-              setShowPassword(false);
-              setPassword('');
-              setError('');
-            }}
-            className="text-sm text-neutral-500 hover:text-neutral-700 text-center"
-          >
-            Use a different email
-          </button>
+          <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setShowPassword(false);
+                setPassword('');
+                setError('');
+              }}
+              className="text-sm text-neutral-500 hover:text-neutral-700 text-center"
+            >
+              Use a different email
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push('/forgot-password')}
+              className="text-sm text-primary-600 hover:text-primary-700 text-center"
+            >
+              Forgot password?
+            </button>
+          </div>
         )}
       </form>
     </AuthLayout>

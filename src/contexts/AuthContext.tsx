@@ -14,6 +14,8 @@ interface AuthContextType {
   verifyMagicCode: (email: string, code: string) => Promise<void>;
   createAccount: (email: string, password: string, name?: string) => Promise<void>;
   signOut: () => Promise<void>;
+  sendPasswordResetCode: (email: string) => Promise<void>;
+  resetPassword: (email: string, code: string, newPassword: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -797,6 +799,82 @@ function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const sendPasswordResetCode = async (email: string) => {
+    try {
+      const normalizedEmail = email.toLowerCase().trim();
+      console.log('Sending password reset code to:', normalizedEmail);
+
+      // Check if user exists
+      const userExists = await checkUserExists(normalizedEmail);
+      if (!userExists) {
+        throw new Error('No account found with this email address.');
+      }
+
+      // Send magic code via InstantDB (same as regular sign-in)
+      // The user will use this code to verify their identity before resetting password
+      await auth.sendMagicCode({ email: normalizedEmail });
+      console.log('Password reset code sent successfully');
+    } catch (error: any) {
+      console.error('Error sending password reset code:', error);
+      throw error;
+    }
+  };
+
+  const resetPassword = async (email: string, code: string, newPassword: string) => {
+    try {
+      const normalizedEmail = email.toLowerCase().trim();
+      console.log('Resetting password for:', normalizedEmail);
+
+      // First verify the magic code to authenticate the user
+      await auth.verifyMagicCode({ email: normalizedEmail, code });
+      console.log('Magic code verified successfully');
+
+      // Wait for authentication to complete
+      let attempts = 0;
+      while (!instantUser && attempts < 20) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        attempts++;
+      }
+
+      if (!instantUser) {
+        throw new Error('Verification failed. Please try again.');
+      }
+
+      // Hash the new password
+      const hashedPassword = await hashPassword(newPassword);
+
+      // Wait for usersData to be available
+      let userAttempts = 0;
+      while (!usersData?.users && userAttempts < 10) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        userAttempts++;
+      }
+
+      // Find the user in the database
+      const user = usersData?.users?.find(
+        (u: any) => u.email?.toLowerCase()?.trim() === normalizedEmail
+      );
+
+      if (!user) {
+        throw new Error('User not found. Please try again.');
+      }
+
+      // Update the password in the database
+      if (!db) {
+        throw new Error('Database not initialized');
+      }
+
+      await db.transact(
+        tx.users[user.id].update({ password: hashedPassword })
+      );
+
+      console.log('Password reset successfully');
+    } catch (error: any) {
+      console.error('Error resetting password:', error);
+      throw error;
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -809,6 +887,8 @@ function AuthProvider({ children }: { children: ReactNode }) {
         verifyMagicCode,
         createAccount,
         signOut,
+        sendPasswordResetCode,
+        resetPassword,
       }}
     >
       {children}

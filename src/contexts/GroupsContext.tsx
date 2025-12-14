@@ -348,9 +348,15 @@ export function GroupsProvider({ children }: { children: ReactNode }) {
     
     // First, get members from current user's group (this will have the most up-to-date info)
     const currentUserGroup = groups.find(g => g.id === groupId);
+    
+    // Create a set of valid member IDs from current user's memberList
+    // This ensures we only show members who are still in the group (not deleted/left)
+    const validMemberIds = new Set<string>();
     if (currentUserGroup?.memberList) {
       for (const member of currentUserGroup.memberList) {
         const memberId = member.id === 'current-user' ? userId : member.id;
+        validMemberIds.add(memberId);
+        
         if (!allMembersMap.has(memberId)) {
           // If this is the current user, always use their current profile name
           const memberName = memberId === userId 
@@ -491,10 +497,16 @@ export function GroupsProvider({ children }: { children: ReactNode }) {
       }
     }
     
+    // Filter to only include members still in the current user's group
+    // This ensures deleted/left members don't show up in avatars
+    const validMembers = Array.from(allMembersMap.values()).filter(member => 
+      validMemberIds.has(member.id)
+    );
+    
     // Convert Map to array and map current user's ID to 'current-user' for display
     // IMPORTANT: Only map the current user to 'current-user' and "You"
     // All other members should keep their actual names
-    const allMembers = Array.from(allMembersMap.values()).map(member => {
+    const allMembers = validMembers.map(member => {
       // Only change the current user's display
       if (member.id === userId) {
         return {
