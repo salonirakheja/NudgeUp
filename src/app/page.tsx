@@ -13,11 +13,9 @@ export default function Home() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [checkingAccount, setCheckingAccount] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
   const [showCodeVerification, setShowCodeVerification] = useState(false);
   const router = useRouter();
-  const { signIn, checkUserExists, verifyMagicCode, user, isLoading: authLoading } = useAuthContext();
+  const { signIn, verifyMagicCode, user } = useAuthContext();
 
   // Redirect if already logged in
   useEffect(() => {
@@ -26,7 +24,7 @@ export default function Home() {
     }
   }, [user, router]);
 
-  const handleEmailSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!email || !email.includes('@')) {
@@ -34,30 +32,6 @@ export default function Home() {
       return;
     }
 
-    setError('');
-    setCheckingAccount(true);
-    try {
-      const exists = await checkUserExists(email);
-      if (!exists) {
-        setError('No account found with this email.');
-        setTimeout(() => {
-          router.push('/sign-up');
-        }, 1500);
-        return;
-      }
-      // If account exists, show password field
-      setShowPassword(true);
-    } catch (error: any) {
-      console.error('Error checking account:', error);
-      setError('Something went wrong. Please try again.');
-    } finally {
-      setCheckingAccount(false);
-    }
-  };
-
-  const handlePasswordSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
     if (!password) {
       setError('Please enter your password');
       return;
@@ -65,11 +39,10 @@ export default function Home() {
 
     setError('');
     setIsLoading(true);
+    
     try {
       await signIn(email, password);
-      // After password verification:
-      // - If refresh token exists and works: user is authenticated, no code needed
-      // - If refresh token doesn't exist or fails: magic code is sent, show verification screen
+      
       // Check if user is authenticated (refresh token worked)
       let attempts = 0;
       while (!user && attempts < 10) {
@@ -81,13 +54,12 @@ export default function Home() {
         // User authenticated via refresh token - redirect to check-in
         router.push('/check-in');
       } else {
-        // Refresh token didn't work or doesn't exist - show code verification
+        // Refresh token didn't work - magic code was sent, show verification screen
         setShowCodeVerification(true);
       }
     } catch (error: any) {
-      console.error('Error signing in:', error);
-      // If error mentions magic code, show code verification screen
-      if (error.message && (error.message.includes('magic code') || error.message.includes('code'))) {
+      // Check if magic code is required
+      if (error.message === 'MAGIC_CODE_REQUIRED') {
         setShowCodeVerification(true);
       } else {
         setError(error.message || 'Incorrect password. Please try again.');
@@ -101,6 +73,7 @@ export default function Home() {
     setIsLoading(true);
     try {
       await verifyMagicCode(email, code);
+      
       // Wait for authentication
       let attempts = 0;
       while (!user && attempts < 20) {
@@ -136,7 +109,7 @@ export default function Home() {
   return (
     <AuthLayout
       title="Sign in to your account"
-      subtitle="Welcome back! Enter your email to continue."
+      subtitle="Welcome back! Enter your email and password to continue."
       illustrationSize={200}
       footerLink={{
         text: "Don't have an account?",
@@ -144,10 +117,7 @@ export default function Home() {
         href: "/sign-up",
       }}
     >
-      <form 
-        onSubmit={showPassword ? handlePasswordSubmit : handleEmailSubmit} 
-        className="w-full flex flex-col gap-4"
-      >
+      <form onSubmit={handleSubmit} className="w-full flex flex-col gap-4">
         <Input
           type="email"
           placeholder="email@domain.com"
@@ -155,27 +125,22 @@ export default function Home() {
           onChange={(e) => {
             setEmail(e.target.value);
             setError('');
-            setShowPassword(false);
           }}
           required
           className="h-12"
-          disabled={showPassword}
         />
         
-        {showPassword && (
-          <Input
-            type="password"
-            placeholder="Enter your password"
-            value={password}
-            onChange={(e) => {
-              setPassword(e.target.value);
-              setError('');
-            }}
-            required
-            className="h-12"
-            autoFocus
-          />
-        )}
+        <Input
+          type="password"
+          placeholder="Enter your password"
+          value={password}
+          onChange={(e) => {
+            setPassword(e.target.value);
+            setError('');
+          }}
+          required
+          className="h-12"
+        />
 
         {error && (
           <p className="text-red-600 text-sm text-center">{error}</p>
@@ -184,33 +149,18 @@ export default function Home() {
         <Button 
           type="submit" 
           variant="primary" 
-          disabled={isLoading || checkingAccount}
+          disabled={isLoading}
         >
-          {checkingAccount ? 'Checking...' : isLoading ? 'Signing in...' : showPassword ? 'Sign in' : 'Continue'}
+          {isLoading ? 'Signing in...' : 'Sign in'}
         </Button>
 
-        {showPassword && (
-          <div className="flex flex-col gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setShowPassword(false);
-                setPassword('');
-                setError('');
-              }}
-              className="text-sm text-neutral-500 hover:text-neutral-700 text-center"
-            >
-              Use a different email
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push('/forgot-password')}
-              className="text-sm text-primary-600 hover:text-primary-700 text-center"
-            >
-              Forgot password?
-            </button>
-          </div>
-        )}
+        <button
+          type="button"
+          onClick={() => router.push('/forgot-password')}
+          className="text-sm text-primary-600 hover:text-primary-700 text-center"
+        >
+          Forgot password?
+        </button>
       </form>
     </AuthLayout>
   );

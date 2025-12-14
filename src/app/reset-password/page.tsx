@@ -19,7 +19,7 @@ function ResetPasswordContent() {
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { resetPassword, verifyMagicCode } = useAuthContext();
+  const { resetPassword, verifyMagicCode, user } = useAuthContext();
 
   useEffect(() => {
     const emailParam = searchParams.get('email');
@@ -77,8 +77,15 @@ function ResetPasswordContent() {
     try {
       await resetPassword(email, code, newPassword);
       
-      // Success - redirect to sign in
-      router.push('/?message=Password reset successfully. Please sign in.');
+      // Wait for user state to update (user is already authenticated from code verification)
+      let attempts = 0;
+      while (!user && attempts < 20) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        attempts++;
+      }
+      
+      // Success - redirect to app (user is already authenticated, refresh token is stored)
+      router.push('/check-in');
     } catch (error: any) {
       console.error('Error resetting password:', error);
       setError(error.message || 'Failed to reset password. Please try again.');
